@@ -20,7 +20,7 @@ overlap_epsilon = 1e-5
 u, length = 1, 1
 attract, align = 0, 0
 
-prb1 = problemClass.active2DProblem(name='testFiniteDipole2D')
+prb1 = problemClass.behavior2DProblem(name='testFiniteDipole2D')
 prb1.attract = attract
 prb1.align = align
 

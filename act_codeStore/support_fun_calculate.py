@@ -48,12 +48,12 @@ class _base_do2D(_base_doCalculate):
                  un=1, ln=1, Xlim=3, seed=None,
                  save_every=1, tqdm_fun=tqdm_notebook,
                  prbHandle=problemClass._base2DProblem,
-                 rltHandle=relationClass.relation2D,
+                 rltHandle=relationClass._baseRelation2D,
                  ptcHandle=particleClass.particle2D,
                  **kwargs):
         super().__init__(**kwargs)
 
-        err_msg = 'wrong parameter nptc. '
+        err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
         assert nptc > 4, err_msg
         un = self._test_para(un, nptc, 'wrong parameter un. ')
         ln = self._test_para(ln, nptc, 'wrong parameter ln. ')
@@ -73,7 +73,7 @@ class _base_do2D(_base_doCalculate):
         np.random.seed(seed)
         for tun, tln in zip(un, ln):
             tptc = ptcHandle(length=tln, name='ptc2D')
-            tptc.phi = (np.random.sample((1,)) - 0.5) * 2 * np.pi
+            tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
             tptc.X = np.random.uniform(-Xlim, Xlim, (2,))
             tptc.u = tun
             prb1.add_obj(tptc)
@@ -100,6 +100,9 @@ class _base_do2D(_base_doCalculate):
         return
 
     def do_calculate(self, max_t, ini_t=0, eval_dt=0.1, ):
+        err_msg = 'wrong parameter eval_dt, eval_dt>0. '
+        assert eval_dt > 0, err_msg
+
         prb1 = self.problem
         self.addInteraction(prb1)
         prb1.update_prepare()
@@ -122,6 +125,36 @@ class do_LimFiniteDipole2D(do_FiniteDipole2D):
         prb1.add_act(act1)
         act2 = interactionClass.limFiniteDipole2D(name='FiniteDipole2D')
         prb1.add_act(act2)
+        return True
+
+
+class do_behaviorParticle2D(_base_do2D):
+    def __init__(self, nptc, update_fun='1fe', update_order=(0, 0),
+                 overlap_epsilon=1e-2, attract=1, align=1,
+                 un=1, ln=-1, Xlim=3, seed=None,
+                 save_every=1, tqdm_fun=tqdm_notebook,
+                 prbHandle=problemClass._base2DProblem,
+                 rltHandle=relationClass._baseRelation2D,
+                 ptcHandle=particleClass.particle2D,
+                 **kwargs):
+        err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
+        assert update_fun == "1fe", err_msg
+        err_msg = 'wrong parameter update_order, only (0, 0) is acceptable. '
+        assert update_order == (0, 0), err_msg
+        err_msg = 'wrong parameter ln, only -1 is acceptable. '
+        assert np.isclose(ln, -1), err_msg
+
+        super().__init__(nptc, update_fun, update_order, overlap_epsilon, attract, align,
+                         un, ln, Xlim, seed, save_every, tqdm_fun,
+                         prbHandle, rltHandle, ptcHandle, **kwargs)
+
+    def addInteraction(self, prb1):
+        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        prb1.add_act(act1)
+        act3 = interactionClass.Attract2D(name='Attract2D')
+        prb1.add_act(act3)
+        act4 = interactionClass.Align2D(name='Align2D')
+        prb1.add_act(act4)
         return True
 
 

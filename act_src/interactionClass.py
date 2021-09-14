@@ -22,7 +22,7 @@ from act_codeStore.support_class import *
 class _baseAction(baseClass.baseObj):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._obj_list = uniqueList(acceptType=particleClass.baseParticle)  # contain objects
+        self._obj_list = uniqueList(acceptType=particleClass._baseParticle)  # contain objects
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
         self._dmda = None
 
@@ -44,7 +44,7 @@ class _baseAction(baseClass.baseObj):
 
     def _check_add_obj(self, obj):
         err_msg = 'wrong object type'
-        assert isinstance(obj, particleClass.baseParticle), err_msg
+        assert isinstance(obj, particleClass._baseParticle), err_msg
         err_msg = 'wrong dimension'
         assert np.isclose(self.dimension, obj.dimension), err_msg
         return True
@@ -69,11 +69,11 @@ class _baseAction(baseClass.baseObj):
         return True
 
     @abc.abstractmethod
-    def update_each_action(self, obji: "particleClass.baseParticle", **kwargs):
+    def update_each_action(self, obji: "particleClass._baseParticle", **kwargs):
         return 0, 0
 
     @abc.abstractmethod
-    def update_action(self):
+    def update_action(self, **kwargs):
         return 0, 0
 
     # def update_action(self):
@@ -93,7 +93,7 @@ class _baseAction2D(_baseAction):
         self._dimension = 2  # 2 for 2D
         self._obj_list = uniqueList(acceptType=particleClass.particle2D)  # contain objects
 
-    def update_action(self):
+    def update_action(self, F):
         # Uall, Wall = [], []
         # for obji in self.obj_list:
         #     u, w = self.update_each_action(obji)
@@ -107,34 +107,38 @@ class _baseAction2D(_baseAction):
         dmda = self.dmda
         obj_list = self.obj_list
 
-        Uall = np.zeros((nobj * dimension))
-        Wall = np.zeros((nobj))
+        # Uall = np.zeros((nobj * dimension))
+        # Wall = np.zeros((nobj))
+        idxW0 = dimension * nobj
         for i0 in range(dmda.getRanges()[0][0], dmda.getRanges()[0][1]):
             # print(i0)
             obji = obj_list[i0]
             i1 = obji.index
-            Uall[2 * i1:2 * i1 + 2], Wall[i1] = self.update_each_action(obji)
-        # assert 1 == 2
-        return Uall, Wall
+            u, w = self.update_each_action(obji)
+            # print(i1, obji, u, w)
+            F.setValues((dimension * i1, dimension * i1 + 1), u, addv=True)
+            F.setValue(idxW0 + i0, w, addv=True)
+            # print(i0, [obji.X for obji in obj_list])
+        return True
 
 
 class selfPropelled2D(_baseAction2D):
-    def update_each_action(self, obji: "particleClass.baseParticle", **kwargs):
+    def update_each_action(self, obji: "particleClass._baseParticle", **kwargs):
         U = obji.u * obji.P1
         return U, 0
 
 
 class Dipole2D(_baseAction2D):
     def check_self(self):
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         err_msg = 'action %s needs at least two particles. ' % type(self).__name__
         assert prb.n_obj > 1, err_msg
         return True
 
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         obji_idx = obji.index
-        relationHandle = prb.relationHandle  # type: relationClass.relation2D
+        relationHandle = prb.relationHandle  # type: relationClass._baseRelation2D
         theta_ij = relationHandle.theta_ij
         rho_ij = relationHandle.rho_ij
         e_rho_ij = relationHandle.e_rho_ij
@@ -157,16 +161,16 @@ class FiniteDipole2D(Dipole2D):
     def check_self(self):
         super().check_self()
 
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         err_handle = 'wrong particle type. particle name: %s, current type: %s, expect type: %s. '
         # todo: modify prb.obj_list
-        for obji in prb.obj_list:  # type: particleClass.baseParticle
+        for obji in prb.obj_list:  # type: particleClass._baseParticle
             err_msg = err_handle % (obji.index, obji.type, 'finiteDipole2D')
             assert isinstance(obji, particleClass.finiteDipole2D), err_msg
         return True
 
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         l = obji.length
         phi = obji.phi  # alpha in the theory.
         z0 = obji.X[0] + 1j * obji.X[1]  # center in complex plane
@@ -189,29 +193,30 @@ class limFiniteDipole2D(FiniteDipole2D):
     def check_self(self):
         super().check_self()
 
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         err_handle = 'wrong particle type. particle name: %s, current type: %s, expect type: %s. '
         # todo: modify prb.obj_list
-        for obji in prb.obj_list:  # type: particleClass.baseParticle
+        for obji in prb.obj_list:  # type: particleClass._baseParticle
             err_msg = err_handle % (obji.index, obji.type, 'limFiniteDipole2D')
             assert isinstance(obji, particleClass.limFiniteDipole2D), err_msg
         return True
 
     def update_each_action(self, obji: "particleClass.limFiniteDipole2D", **kwargs):
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         Ui, Wi = 0, 0
         for objj in prb.obj_list:  # type: particleClass.limFiniteDipole2D
             if objj is not obji:
-                Ui += objj.UDipole2Dof(obji)
-                Wi += objj.WDipole2Dof(obji)
+                ui, wi = objj.UWDipole2Dof(obji)
+                Ui += ui
+                Wi += wi
         return Ui, Wi
 
 
 class Attract2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         obji_idx = obji.index
-        relationHandle = prb.relationHandle  # type: relationClass.VoronoiRelation2D
+        relationHandle = prb.relationHandle  # type: relationClass.VoronoiBaseRelation2D
         # relationHandle.dbg_showVoronoi()
         theta_ij = relationHandle.theta_ij
         rho_ij = relationHandle.rho_ij
@@ -233,9 +238,9 @@ class Attract2D(_baseAction2D):
 
 class Align2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
-        prb = self.father  # type: problemClass.active2DProblem
+        prb = self.father  # type: problemClass.behavior2DProblem
         obji_idx = obji.index
-        relationHandle = prb.relationHandle  # type: relationClass.VoronoiRelation2D
+        relationHandle = prb.relationHandle  # type: relationClass.VoronoiBaseRelation2D
         # relationHandle.dbg_showVoronoi()
         theta_ij = relationHandle.theta_ij
 
@@ -252,3 +257,13 @@ class Align2D(_baseAction2D):
             # print(obji_idx, objj_idx, tphi_ij, obji.align * obji.u * np.sin(tphi_ij) * t2, t2)
         Wi = Wi1 / Wi2
         return np.zeros(2), Wi
+
+class Wiener2D(_baseAction2D):
+    def check_self(self):
+        prb = self.father  # type: problemClass._base2DProblem
+        kwargs = prb.kwargs
+        update_fun = kwargs['update_fun']
+
+        err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
+        assert update_fun == "1fe", err_msg
+

@@ -15,10 +15,9 @@ from act_src import problemClass
 from act_codeStore.support_class import *
 
 
-class baseParticle(baseClass.baseObj):
+class _baseParticle(baseClass.baseObj):
     def __init__(self, name='...', **kwargs):
         super().__init__(name, **kwargs)
-        # self._type = 'baseParticle'
         self._index = -1  # object index
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
         self._father = None
@@ -32,7 +31,7 @@ class baseParticle(baseClass.baseObj):
         self._attract = 0  # attract intensity
         self._align = 0  # align intensity
         self._dipole = 0  # dipole intensity
-        self._neighbor_list = uniqueList(acceptType=baseParticle)
+        self._neighbor_list = uniqueList(acceptType=_baseParticle)
         # print(self._name)
         # print(self._type)
         # print(self._kwargs)
@@ -80,7 +79,7 @@ class baseParticle(baseClass.baseObj):
     @u.setter
     def u(self, u):
         err_msg = 'u is a scale. '
-        assert np.array(u).size == 1, err_msg
+        assert u.size == 1, err_msg
         self._u = u
 
     @property
@@ -129,7 +128,7 @@ class baseParticle(baseClass.baseObj):
     @attract.setter
     def attract(self, attract):
         err_msg = 'attract is a scale. '
-        assert np.array(attract).size == 1, err_msg
+        assert attract.size == 1, err_msg
         self._attract = attract
 
     @property
@@ -139,7 +138,7 @@ class baseParticle(baseClass.baseObj):
     @align.setter
     def align(self, align):
         err_msg = 'align is a scale. '
-        assert np.array(align).size == 1, err_msg
+        assert align.size == 1, err_msg
         self._align = align
 
     @property
@@ -191,18 +190,17 @@ class baseParticle(baseClass.baseObj):
         assert np.isfinite(self.align), err_msg % 'align'
         assert np.isfinite(self.dipole), err_msg % 'dipole'
         for obji in self.neighbor_list:
-            assert isinstance(obji, baseParticle), err_msg % 'neighbor_list'
+            assert isinstance(obji, _baseParticle), err_msg % 'neighbor_list'
         return True
 
     def update_finish(self):
         self._X_hist = np.vstack(self.X_hist)
         self._U_hist = np.vstack(self.U_hist)
-        self._W_hist = np.vstack(self.W_hist)
         return True
 
 
-class particle2D(baseParticle):
-    def __init__(self, length=0, name='...', **kwargs):
+class particle2D(_baseParticle):
+    def __init__(self, name='...', **kwargs):
         super().__init__(name, **kwargs)
         # self._type = 'particle2D'
         self._dimension = 2  # 2 for 2D
@@ -211,20 +209,18 @@ class particle2D(baseParticle):
         self._phi_hist = []  # major norm P1, for 2D version
         self._X = np.array((0, 0))  # particle center coordinate
         self._U = np.nan * np.array((0, 0))  # particle translational velocity in global coordinate
-        self._W = np.nan * np.array((0, 0))  # particle rotational velocity in global coordinate
-        self._length = length  # length of particle
+        self._W = np.nan * np.array((0,))  # particle rotational velocity in global coordinate
         self._neighbor_list = uniqueList(acceptType=type(self))
-        self.update_dipole()
         self.update_phi()
 
-    @baseParticle.P1.setter
+    @_baseParticle.P1.setter
     def P1(self, P1):
         # err_msg = 'wrong array size'
         # assert P1.size == 2, err_msg
-        baseParticle.P1.fset(self, P1)
+        _baseParticle.P1.fset(self, P1)
         self.update_phi()
 
-    @baseParticle.father.setter
+    @_baseParticle.father.setter
     def father(self, father):
         assert isinstance(father, problemClass._base2DProblem)
         self._father = father
@@ -235,40 +231,22 @@ class particle2D(baseParticle):
 
     @phi.setter
     def phi(self, phi):
-        phi = np.hstack((phi, ))
+        # phi = np.hstack((phi,))
         err_msg = 'phi is a scale. '
         assert phi.size == 1, err_msg
         assert -np.pi <= phi <= np.pi
-        self._phi = phi[0]
+        self._phi = phi
         self.update_P1()
 
-    @baseParticle.W.setter
+    @_baseParticle.W.setter
     def W(self, W):
         err_msg = 'W is a scale. '
-        assert np.array(W).size == 1, err_msg
-        baseParticle.W.fset(self, W)
+        assert W.size == 1, err_msg
+        _baseParticle.W.fset(self, W)
 
     @property
     def phi_hist(self):
         return self._phi_hist
-
-    @property
-    def length(self):
-        return self._length
-
-    @length.setter
-    def length(self, length):
-        err_msg = 'length is a scale. '
-        assert np.array(length).size == 1, err_msg
-        self._length = length
-        self.update_dipole()
-
-    # def update_self(self, **kwargs):
-    #     return
-
-    def update_dipole(self):
-        self._dipole = np.pi * self.length ** 2
-        return True
 
     def update_phi(self):
         self._phi = np.arctan2(self._P1[1], self._P1[0])
@@ -303,41 +281,50 @@ class particle2D(baseParticle):
         assert isinstance(self.father, problemClass._base2DProblem), err_msg % 'father'
         assert self.X.shape == (2,), err_msg % 'X'
         assert self.U.shape == (2,), err_msg % 'U'
-        assert self.W.shape == (2,), err_msg % 'W'
+        assert self.W.shape == (1,), err_msg % 'W'
         for obji in self.neighbor_list:
             assert isinstance(obji, particle2D), err_msg % 'neighbor_list'
         assert np.isfinite(self.P1).all(), err_msg % 'P1'
         assert self.P1.shape == (2,), err_msg % 'P1'
+        assert isinstance(self.phi, np.float), err_msg % 'phi'
         assert np.isfinite(self.phi), err_msg % 'phi'
-        assert np.isfinite(self.length), err_msg % 'length'
         return True
 
     def update_finish(self):
         super().update_finish()
+        self._W_hist = np.hstack(self.W_hist)
         self._phi_hist = np.hstack(self.phi_hist)
         return True
 
 
 class finiteDipole2D(particle2D):
     def __init__(self, length, name='...', **kwargs):
-        super().__init__(length, name)
+        super().__init__(name, **kwargs)
         self._Z = np.nan
         self._Zl = np.nan
         self._Zr = np.nan
+        self._length = length  # length of particle
+        self.update_dipole()
         self.update_Z()
 
-    @baseParticle.X.setter
-    def X(self, X):
-        baseParticle.X.fset(self, X)
-        self.update_Z()
+    @property
+    def length(self):
+        return self._length
 
-    @particle2D.length.setter
+    @length.setter
     def length(self, length):
-        particle2D.length.fset(self, length)
+        err_msg = 'length is a scale. '
+        assert length.size == 1, err_msg
+        self._length = length
         self.update_Z()
         self.update_dipole()
 
-    @baseParticle.father.setter
+    @_baseParticle.X.setter
+    def X(self, X):
+        _baseParticle.X.fset(self, X)
+        self.update_Z()
+
+    @_baseParticle.father.setter
     def father(self, father):
         assert isinstance(father, problemClass.finiteDipole2DProblem)
         self._father = father
@@ -359,9 +346,9 @@ class finiteDipole2D(particle2D):
     def Zr(self):
         return self._Zr  # right vortex
 
-    @baseParticle.u.setter
+    @_baseParticle.u.setter
     def u(self, u):
-        baseParticle.u.fset(self, u)
+        _baseParticle.u.fset(self, u)
         self.update_dipole()
 
     def update_Z(self):
@@ -382,17 +369,21 @@ class finiteDipole2D(particle2D):
         tau = self.dipole
         Zl = self.Zl  # left vortex
         Zr = self.Zr  # right vortex
-        wo = 1j * tau / (2 * np.pi) * (1 / (Z - Zr) -
-                                       1 / (Z - Zl))  # W = u - i * v: complex velocity
+        wo = 1j * tau / (2 * np.pi) * (1 / (Z - Zr) - 1 / (Z - Zl))  # W = u - i * v: complex velocity
         return wo
 
     def UselfPropelled2D(self):
         U = self.u * self.P1
         return U
 
+    def check_self(self):
+        super().check_self()
+        err_msg = 'wrong parameter value: %s '
+        assert np.isfinite(self.length), err_msg % 'length'
+
 
 class limFiniteDipole2D(finiteDipole2D):
-    @baseParticle.father.setter
+    @_baseParticle.father.setter
     def father(self, father):
         assert isinstance(father, problemClass.limFiniteDipole2DProblem)
         self._father = father
@@ -405,9 +396,12 @@ class limFiniteDipole2D(finiteDipole2D):
         t1 = ((tau * l) / (2 * np.pi)) * (np.exp(1j * phi) / dZ ** 2)
         # Ui = np.dstack((np.real(t1), -np.imag(t1)))
         # print(Ui.shape)
+        # print(self, Zn, self.Z, np.real(t1), -np.imag(t1))
         return np.real(t1), -np.imag(t1)
 
     def UDipole2Dof(self, obji: 'finiteDipole2D'):
+        # print(self, obji, obji.Z)
+        # print(self, self, self.Z)
         return np.array(self.UDipole2Dat(obji.Z))
 
     def WDipole2Dat(self, Zn, phin):
@@ -420,3 +414,16 @@ class limFiniteDipole2D(finiteDipole2D):
 
     def WDipole2Dof(self, obji: 'finiteDipole2D'):
         return self.WDipole2Dat(obji.Z, obji.phi)
+
+    def UWDipole2Dat(self, Zn, phin):
+        tau = self.dipole
+        l = self.length
+        phi = self.phi
+        dZ = Zn - self.Z
+        t1 = ((tau * l) / (2 * np.pi)) * (np.exp(1j * phi) / dZ ** 2)
+        Wi = np.real(1j * np.exp(1j * (2 * phin + phi)) / dZ ** 3 * (tau * l / np.pi))
+        return np.real(t1), -np.imag(t1), Wi
+
+    def UWDipole2Dof(self, obji: 'finiteDipole2D'):
+        u1, u2, w = self.UWDipole2Dat(obji.Z, obji.phi)
+        return np.array((u1, u2)), w

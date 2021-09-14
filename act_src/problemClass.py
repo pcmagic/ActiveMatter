@@ -23,7 +23,7 @@ class _baseProblem(baseClass.baseObj):
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
         self._rot_noise = 0  # rotational noise
         self._trs_noise = 0  # translational noise
-        self._obj_list = uniqueList(acceptType=particleClass.baseParticle)  # contain objects
+        self._obj_list = uniqueList(acceptType=particleClass._baseParticle)  # contain objects
         self._action_list = uniqueList(
             acceptType=interactionClass._baseAction)  # contain rotational interactions
         self._Wall = np.nan  # rotational velocity at current time
@@ -98,7 +98,6 @@ class _baseProblem(baseClass.baseObj):
         self._check_relationHandle(relationHandle)
         relationHandle.father = self
         self._relationHandle = relationHandle
-
 
     @property
     def comm(self):
@@ -203,9 +202,20 @@ class _baseProblem(baseClass.baseObj):
     def n_obj(self):
         return len(self.obj_list)
 
+    @property
+    def polar(self) -> np.asarray:
+        polar = np.linalg.norm(np.sum(np.vstack([obji.P1 for obji in self.obj_list]), axis=0)) / self.n_obj
+        return polar
+
+    @property
+    def milling_Daniel2014(self) -> np.asarray:
+        t1 = np.vstack([np.cross(obji.X, obji.P1) / np.linalg.norm(obji.X) for obji in self.obj_list])
+        milling = np.linalg.norm(np.sum(t1, axis=0)) / self.n_obj
+        return milling
+
     def _check_add_obj(self, obj):
         err_msg = 'wrong object type'
-        assert isinstance(obj, particleClass.baseParticle), err_msg
+        assert isinstance(obj, particleClass._baseParticle), err_msg
         err_msg = 'wrong dimension'
         assert np.isclose(self.dimension, obj.dimension), err_msg
         return True
@@ -238,24 +248,22 @@ class _baseProblem(baseClass.baseObj):
         # pass
 
     def update_prepare(self):
-        self._ini_UW()
         self.relationHandle.update_relation()
         self.relationHandle.update_neighbor()
-        for acti in self.action_list: # type: interactionClass._baseAction
+        for acti in self.action_list:  # type: interactionClass._baseAction
             acti.set_dmda()
         return True
 
-    def _ini_UW(self):
-        self.Uall = np.zeros((self.dimension * self.n_obj,))
-        self.Wall = np.nan
-        return
-
-    def update_UWall(self):
+    def update_UWall(self, F):
         self.update_prepare()
+        F.zeroEntries()
+        # PETSc.Sys.Print(F.getArray())
+        # print(F.getArray())
         for action in self.action_list:
-            Ui, Wi = action.update_action()
-            self.Uall += Ui
-            self.Wall += Wi
+            action.update_action(F)
+            # F.assemble()
+        F.assemble()
+        # PETSc.Sys.Print(F.getArray())
         return True
 
     def check_self(self, **kwargs):
@@ -264,7 +272,7 @@ class _baseProblem(baseClass.baseObj):
         err_msg = 'wrong parameter value: %s '
         assert self.dimension in (2, 3), err_msg % 'dimension'
 
-        for obji in self.obj_list:  # type: particleClass.baseParticle
+        for obji in self.obj_list:  # type: particleClass._baseParticle
             obji.check_self()
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.check_self()
@@ -288,6 +296,8 @@ class _baseProblem(baseClass.baseObj):
         y0 = self._get_y0()
         y = PETSc.Vec().createWithArray(y0, comm=comm)
         f = y.duplicate()
+        # print(f)
+        # print(1111)
         ts = PETSc.TS().create(comm=comm)
         ts.setProblemType(ts.ProblemType.NONLINEAR)
         ts.setType(ts.Type.RK)
@@ -357,7 +367,7 @@ class _baseProblem(baseClass.baseObj):
         # Y = ts.getSolution()
         # self._do_store_data(ts, i, t, Y)
 
-        for obji in self.obj_list:  # type: particleClass.baseParticle
+        for obji in self.obj_list:  # type: particleClass._baseParticle
             obji.update_finish()
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.update_finish()
@@ -375,11 +385,6 @@ class _base2DProblem(_baseProblem):
         super()._check_add_obj(obj)
         err_msg = 'wrong object type'
         assert isinstance(obj, particleClass.particle2D), err_msg
-        return True
-
-    def _ini_UW(self):
-        super()._ini_UW()
-        self.Wall = np.zeros(self.n_obj)
         return True
 
     def update_obj_position(self, X_all, phi_all, **kwargs):
@@ -413,7 +418,7 @@ class _base2DProblem(_baseProblem):
         return y0
 
     def Y2Xphi(self, Y):
-        y = Y.getArray()
+        y = self.vec_scatter(Y, destroy=False)
         nobj = self.n_obj
         dim = self.dimension
         X_size = dim * nobj
@@ -426,23 +431,29 @@ class _base2DProblem(_baseProblem):
         #   Y = [X_all, phi_all]
         #   F = [U_all, W_all]
         X_all, phi_all = self.Y2Xphi(Y)
-        # print('dbg', phi_all)
         self.update_obj_position(X_all, phi_all)
-        self.update_UWall()
-        F[:] = np.hstack((self.Uall, self.Wall))
-        F.assemble()
+        self.update_UWall(F)
+        tF = self.vec_scatter(F)
+        self.update_obj_velocity(tF[:self.dimension * self.n_obj], tF[self.dimension * self.n_obj:])
+        # F.assemble()
+        # PETSc.Sys.Print()
+        # PETSc.Sys.Print('dbg', t)
+        # PETSc.Sys.Print('%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
+        #     Y.getArray()[0], Y.getArray()[1], Y.getArray()[2],
+        #     Y.getArray()[3], Y.getArray()[4], Y.getArray()[5], ))
+        # PETSc.Sys.Print('%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
+        #     F.getArray()[0], F.getArray()[1], F.getArray()[2],
+        #     F.getArray()[3], F.getArray()[4], F.getArray()[5], ))
         return True
 
     def _do_store_data(self, ts, i, t, Y):
         if t > self.max_it:
-            return
+            return False
         else:
-            # X_all, phi_all = self.Y2Xphi(Y)
-            # self.update_obj_position(X_all, phi_all)
             dt = ts.getTimeStep()
             self.t_hist.append(t)
             self.dt_hist.append(dt)
-            self.update_obj_velocity(self.Uall, self.Wall)
+            # self.update_obj_velocity(self.Uall, self.Wall)
             self.update_obj_hist()
             return True
 
@@ -480,7 +491,7 @@ class limFiniteDipole2DProblem(_base2DProblem):
         return True
 
 
-class active2DProblem(_base2DProblem):
+class behavior2DProblem(_base2DProblem):
     def __init__(self, name='...', **kwargs):
         super().__init__(name, **kwargs)
         self._attract = np.nan  # attract intensity
@@ -502,18 +513,18 @@ class active2DProblem(_base2DProblem):
     def align(self, align):
         self._align = align
 
-    def add_obj(self, obj: "particleClass.baseParticle"):
+    def add_obj(self, obj: "particleClass._baseParticle"):
         super().add_obj(obj)
         obj.attract = self.attract
         obj.align = self.align
         return True
 
 
-class activeFiniteDipole2DProblem(active2DProblem, finiteDipole2DProblem):
+class behaviorFiniteDipole2DProblem(behavior2DProblem, finiteDipole2DProblem):
     def _nothing(self):
         pass
 
 
-class actLimFiniteDipole2DProblem(active2DProblem, limFiniteDipole2DProblem):
+class actLimFiniteDipole2DProblem(behavior2DProblem, limFiniteDipole2DProblem):
     def _nothing(self):
         pass

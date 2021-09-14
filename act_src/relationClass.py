@@ -34,12 +34,10 @@ class _baseRelation(baseClass.baseObj):
         return
 
 
-class relation2D(_baseRelation):
+class _baseRelation2D(_baseRelation):
     def __init__(self, name='...', **kwargs):
         super().__init__(name, **kwargs)
         self._theta_ij = np.nan  # angle between ei and (rj - ri)
-        # self._theta_ji = np.nan  # angle between ej and (ri - rj)
-        # self._phi_ij = np.nan
         self._e_rho_ij = np.nan  # unite direction (ri - rj) / |ri - rj|
         self._rho_ij = np.nan  # inter-swimmer distance |ri - rj|
         self._phi_rho_ij = np.nan  # angle of e_rho_ij, np.arctan2(e_rho_ij[1], e_rho_ij[0])
@@ -48,10 +46,6 @@ class relation2D(_baseRelation):
     @property
     def theta_ij(self):
         return self._theta_ij
-
-    # @property
-    # def theta_ji(self):
-    #     return self._theta_ji
 
     @property
     def e_rho_ij(self):
@@ -136,22 +130,28 @@ class relation2D(_baseRelation):
     #     self._theta_ij = np.vstack(theta_ij)
     #     return True
 
+    # def update_relation(self, **kwargs):
+    #     self.cal_theta_rho()
+    #     return True
+
+    # def update_neighbor(self, **kwargs):
+    #     prb = self.father  # type: problemClass._baseProblem
+    #     for obji in prb.obj_list:  # type: particleClass.particle2D
+    #         neighbor_list = obji.neighbor_list
+    #         neighbor_list.clear()
+    #         for objj in prb.obj_list:  # type: particleClass.particle2D
+    #             if obji is not objj:
+    #                 neighbor_list.append_noCheck(objj)
+    #     return True
+
     def update_relation(self, **kwargs):
-        self.cal_theta_rho()
-        return True
+        pass
 
     def update_neighbor(self, **kwargs):
-        prb = self.father  # type: problemClass._baseProblem
-        for obji in prb.obj_list:  # type: particleClass.particle2D
-            neighbor_list = obji.neighbor_list
-            neighbor_list.clear()
-            for objj in prb.obj_list:  # type: particleClass.particle2D
-                if obji is not objj:
-                    neighbor_list.append(objj)
-        return True
+        pass
 
 
-class finiteRelation2D(relation2D):
+class finiteRelation2D(_baseRelation2D):
     def cal_rho(self):
         prb = self.father  # type: problemClass._baseProblem
         rho_ij = []
@@ -172,7 +172,7 @@ class limFiniteRelation2D(finiteRelation2D):
         pass
 
 
-class VoronoiRelation2D(relation2D):
+class VoronoiBaseRelation2D(_baseRelation2D):
     def cal_theta_rho(self):
         prb = self.father  # type: problemClass._baseProblem
         theta_ij, rho_ij = [], [],
@@ -191,9 +191,9 @@ class VoronoiRelation2D(relation2D):
         self._theta_ij = np.vstack(theta_ij)
         return True
 
-    # def update_relation(self, **kwargs):
-    #     self.cal_theta_rho()
-    #     return True
+    def update_relation(self, **kwargs):
+        self.cal_theta_rho()
+        return True
 
     def update_neighbor(self, **kwargs):
         prb = self.father  # type: problemClass._baseProblem
@@ -212,12 +212,11 @@ class VoronoiRelation2D(relation2D):
             idx_X = np.hstack([idx_ridge2X[i0] for i0 in idxi_X2ridge])
             tidx = np.logical_not(np.isclose(idx_X, obji.index))
             for i0 in idx_X[tidx]:
-                obji.neighbor_list.append(prb.obj_list[i0])
+                obji.neighbor_list.append_noCheck(prb.obj_list[i0])
         return True
 
     def dbg_showVoronoi(self, **kwargs):
         # from matplotlib import pyplot as plt
-
         prb = self.father  # type: problemClass._baseProblem
         X_list = np.array([obji.X for obji in prb.obj_list])
         vor = Voronoi(X_list)

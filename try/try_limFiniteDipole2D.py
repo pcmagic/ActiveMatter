@@ -61,7 +61,7 @@ tptc2.phi = phi2
 # print(tptc2.phi, tptc2.P1)
 # tptc1.length = 0.1
 
-rlt1 = relationClass.relation2D(name='relation1')
+rlt1 = relationClass._baseRelation2D(name='relation1')
 rlt1.overlap_epsilon = overlap_epsilon
 prb1.relationHandle = rlt1
 

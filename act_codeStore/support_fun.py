@@ -18,7 +18,6 @@ import numpy as np
 # import matplotlib
 import re
 from scanf import scanf
-from scipy import interpolate, integrate
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from matplotlib.patches import FancyArrowPatch
@@ -28,8 +27,9 @@ from matplotlib.colors import Normalize
 from matplotlib.ticker import Locator
 from matplotlib.collections import LineCollection
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, HPacker, VPacker
-
-# from scipy.optimize import curve_fit
+from scipy import interpolate  # , integrate, optimize
+from mpi4py import MPI
+import cProfile
 
 # font = {'size': 20}
 # matplotlib.rc('font', **font)
@@ -98,7 +98,7 @@ def fit_line(ax, x, y, x0, x1, ifprint=1, linestyle='-.', linewidth=1, extendlin
 def fit_power_law(ax, x, y, x0, x1, ifprint=1, linestyle='-.', linewidth=1, extendline=False,
                   color='k', alpha=0.7):
     idx = np.array(x >= x0) & np.array(x <= x1) & np.isfinite((np.log10(x))) & np.isfinite(
-            (np.log10(y)))
+        (np.log10(y)))
     tx = np.log10(x[idx])
     ty = np.log10(y[idx])
     fit_para = np.polyfit(tx, ty, 1)
@@ -897,8 +897,8 @@ class TwoSlopeNorm(Normalize):
         if not self.vmin <= self.vcenter <= self.vmax:
             raise ValueError("vmin, vcenter, vmax must increase monotonically")
         result = np.ma.masked_array(
-                np.interp(result, [self.vmin, self.vcenter, self.vmax],
-                          [0, 0.5, 1.]), mask=np.ma.getmask(result))
+            np.interp(result, [self.vmin, self.vcenter, self.vmax],
+                      [0, 0.5, 1.]), mask=np.ma.getmask(result))
         if is_scalar:
             result = np.atleast_1d(result)[0]
         return result
@@ -941,3 +941,24 @@ def warpMinMax(x, min, max):
 def warpMax(x, max):
     # wrap x -> [0,max)
     return np.mod(max + np.mod(x, max), max)
+
+
+# profile
+def profile(filename=None, comm=MPI.COMM_WORLD):
+    def prof_decorator(f):
+        def wrap_f(*args, **kwargs):
+            pr = cProfile.Profile()
+            pr.enable()
+            result = f(*args, **kwargs)
+            pr.disable()
+
+            if filename is None:
+                pr.print_stats()
+            else:
+                filename_r = filename + ".{}".format(comm.rank)
+                pr.dump_stats(filename_r)
+            return result
+
+        return wrap_f
+
+    return prof_decorator

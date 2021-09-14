@@ -58,3 +58,13 @@ class baseObj:
         PETSc.Sys.Print()
         PETSc.Sys.Print('Information about %s' % str(self))
         return True
+
+    @staticmethod
+    def vec_scatter(vec_petsc, destroy=True):
+        scatter, temp = PETSc.Scatter().toAll(vec_petsc)
+        scatter.scatterBegin(vec_petsc, temp, False, PETSc.Scatter.Mode.FORWARD)
+        scatter.scatterEnd(vec_petsc, temp, False, PETSc.Scatter.Mode.FORWARD)
+        vec = temp.getArray()
+        if destroy:
+            vec_petsc.destroy()
+        return vec

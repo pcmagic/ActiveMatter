@@ -5,7 +5,7 @@ from act_src import interactionClass
 from act_src import problemClass
 from act_src import relationClass
 
-prb1 = problemClass.active2DProblem(name='tryPrb')
+prb1 = problemClass.behavior2DProblem(name='tryPrb')
 
 # for i0 in range(3):
 #     tptc = particleClass.particle2D(name='ptc2D')
@@ -19,7 +19,7 @@ tptc.X = np.array((0, 0))
 tptc.u = np.array((1, ))
 prb1.add_obj(tptc)
 
-rlt1 = relationClass.relation2D(name='relation1')
+rlt1 = relationClass._baseRelation2D(name='relation1')
 prb1.relationHandle = rlt1
 # rlt1.cal_theta_rho()
 

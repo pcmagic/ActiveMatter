@@ -36,7 +36,7 @@
 *.pickle
 pkgs/*
 bck/*
-
+*_out.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

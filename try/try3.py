@@ -26,7 +26,7 @@ for _ in range(test_n):
     prb1.add_obj(tptc)
     # print(tptc.P1, tptc.phi / np.pi, tptc.X)
 
-rlt1 = relationClass.VoronoiRelation2D(name='relation1')
+rlt1 = relationClass.VoronoiBaseRelation2D(name='relation1')
 rlt1.overlap_epsilon = overlap_epsilon
 prb1.relationHandle = rlt1
 

@@ -39,6 +39,9 @@ class uniqueList(UserList):
         self.check(item)
         super().append(item)
 
+    def append_noCheck(self, item):
+        super().append(item)
+
 
 class typeList(UserList):
     def __init__(self, acceptType):
@@ -291,15 +294,15 @@ def rotMatrix_DCM(x0, y0, z0, x, y, z):
 
 def Rloc2glb(theta, phi, psi):
     rotM = np.array(
-            ((np.cos(phi) * np.cos(psi) * np.cos(theta) - np.sin(phi) * np.sin(psi),
-              -(np.cos(psi) * np.sin(phi)) - np.cos(phi) * np.cos(theta) * np.sin(psi),
-              np.cos(phi) * np.sin(theta)),
-             (np.cos(psi) * np.cos(theta) * np.sin(phi) + np.cos(phi) * np.sin(psi),
-              np.cos(phi) * np.cos(psi) - np.cos(theta) * np.sin(phi) * np.sin(psi),
-              np.sin(phi) * np.sin(theta)),
-             (-(np.cos(psi) * np.sin(theta)),
-              np.sin(psi) * np.sin(theta),
-              np.cos(theta))))
+        ((np.cos(phi) * np.cos(psi) * np.cos(theta) - np.sin(phi) * np.sin(psi),
+          -(np.cos(psi) * np.sin(phi)) - np.cos(phi) * np.cos(theta) * np.sin(psi),
+          np.cos(phi) * np.sin(theta)),
+         (np.cos(psi) * np.cos(theta) * np.sin(phi) + np.cos(phi) * np.sin(psi),
+          np.cos(phi) * np.cos(psi) - np.cos(theta) * np.sin(phi) * np.sin(psi),
+          np.sin(phi) * np.sin(theta)),
+         (-(np.cos(psi) * np.sin(theta)),
+          np.sin(psi) * np.sin(theta),
+          np.cos(theta))))
     return rotM
 
 
@@ -554,5 +557,3 @@ class Quaternion:
 
     def get_rotM(self):
         return Rloc2glb(*self.get_thphps())
-
-
