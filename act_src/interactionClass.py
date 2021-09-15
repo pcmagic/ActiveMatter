@@ -54,9 +54,12 @@ class _baseAction(baseClass.baseObj):
         self._obj_list.append(obj)
         return True
 
-    def check_self(self):
+    def check_self(self, **kwargs):
         pass
         return True
+
+    def update_prepare(self):
+        self.set_dmda()
 
     def update_finish(self):
         pass
@@ -85,6 +88,17 @@ class _baseAction(baseClass.baseObj):
     #     Uall = np.hstack(Uall)
     #     Wall = np.hstack(Wall)
     #     return Uall, Wall
+
+    def destroy_self(self):
+        if self.dmda is not None:
+            self._dmda.destroy()
+            self._dmda = None
+        return True
+
+    def print_info(self):
+        super().print_info()
+        PETSc.Sys.Print('  None')
+        return True
 
 
 class _baseAction2D(_baseAction):
@@ -115,10 +129,10 @@ class _baseAction2D(_baseAction):
             obji = obj_list[i0]
             i1 = obji.index
             u, w = self.update_each_action(obji)
-            # print(i1, obji, u, w)
+            # print('dbg', i1, obji, u, w)
             F.setValues((dimension * i1, dimension * i1 + 1), u, addv=True)
             F.setValue(idxW0 + i0, w, addv=True)
-            # print(i0, [obji.X for obji in obj_list])
+            # print('dbg', i0, [obji.X for obji in obj_list])
         return True
 
 
@@ -129,7 +143,7 @@ class selfPropelled2D(_baseAction2D):
 
 
 class Dipole2D(_baseAction2D):
-    def check_self(self):
+    def check_self(self, **kwargs):
         prb = self.father  # type: problemClass.behavior2DProblem
         err_msg = 'action %s needs at least two particles. ' % type(self).__name__
         assert prb.n_obj > 1, err_msg
@@ -158,7 +172,7 @@ class Dipole2D(_baseAction2D):
 
 
 class FiniteDipole2D(Dipole2D):
-    def check_self(self):
+    def check_self(self, **kwargs):
         super().check_self()
 
         prb = self.father  # type: problemClass.behavior2DProblem
@@ -169,7 +183,7 @@ class FiniteDipole2D(Dipole2D):
             assert isinstance(obji, particleClass.finiteDipole2D), err_msg
         return True
 
-    def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
+    def update_each_action(self, obji: "particleClass.finiteDipole2D", **kwargs):
         prb = self.father  # type: problemClass.behavior2DProblem
         l = obji.length
         phi = obji.phi  # alpha in the theory.
@@ -190,7 +204,7 @@ class FiniteDipole2D(Dipole2D):
 
 
 class limFiniteDipole2D(FiniteDipole2D):
-    def check_self(self):
+    def check_self(self, **kwargs):
         super().check_self()
 
         prb = self.father  # type: problemClass.behavior2DProblem
@@ -258,12 +272,32 @@ class Align2D(_baseAction2D):
         Wi = Wi1 / Wi2
         return np.zeros(2), Wi
 
-class Wiener2D(_baseAction2D):
-    def check_self(self):
-        prb = self.father  # type: problemClass._base2DProblem
-        kwargs = prb.kwargs
-        update_fun = kwargs['update_fun']
 
+class Wiener2D(_baseAction2D):
+    def __init__(self, **kwargs):
+        super(Wiener2D, self).__init__(**kwargs)
+        self._sqrt_dt = np.nan
+
+    @property
+    def sqrt_dt(self):
+        return self._sqrt_dt
+
+    def update_prepare(self):
+        super().update_prepare()
+        prb = self.father  # type: problemClass._base2DProblem
+        self._sqrt_dt = np.sqrt(prb.eval_dt)
+
+    def check_self(self, **kwargs):
+        prb = self.father  # type: problemClass._base2DProblem
+        update_fun = prb.update_fun
         err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
         assert update_fun == "1fe", err_msg
 
+    def update_each_action(self, obji: "particleClass._baseParticle", **kwargs):
+        return np.zeros(2), obji.rot_noise * np.random.normal() / self.sqrt_dt
+
+
+    def print_info(self):
+        baseClass.baseObj.print_info(self)
+        PETSc.Sys.Print('  sqrt_dt=%f' % self.sqrt_dt)
+        return True

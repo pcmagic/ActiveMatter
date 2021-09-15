@@ -25,6 +25,6 @@ prb1.relationHandle = rlt1
 
 act1 = interactionClass.selfPropelled2D(name='action1')
 prb1.add_act(act1)
-prb1.update_prepare()
+prb1.update_step()
 prb1.update_self(t1=0.1)
 print(11111)

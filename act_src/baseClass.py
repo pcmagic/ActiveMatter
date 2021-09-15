@@ -56,7 +56,7 @@ class baseObj:
     def print_info(self):
         # OptDB = PETSc.Options()
         PETSc.Sys.Print()
-        PETSc.Sys.Print('Information about %s' % str(self))
+        PETSc.Sys.Print('Information about %s (%s): ' % (str(self), self.type,))
         return True
 
     @staticmethod
@@ -68,3 +68,6 @@ class baseObj:
         if destroy:
             vec_petsc.destroy()
         return vec
+
+    def destroy_self(self, **kwargs):
+        pass

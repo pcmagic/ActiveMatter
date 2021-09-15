@@ -6,9 +6,13 @@ Zhang Ji
 problem class, organize the problem.
 """
 import abc
+import pickle
+from tqdm import tqdm
 import numpy as np
 from tqdm.notebook import tqdm as tqdm_notebook
 from petsc4py import PETSc
+from datetime import datetime
+
 from act_src import baseClass
 from act_src import particleClass
 from act_src import interactionClass
@@ -26,12 +30,14 @@ class _baseProblem(baseClass.baseObj):
         self._obj_list = uniqueList(acceptType=particleClass._baseParticle)  # contain objects
         self._action_list = uniqueList(
             acceptType=interactionClass._baseAction)  # contain rotational interactions
+        self._Xall = np.nan  # location at current time
         self._Wall = np.nan  # rotational velocity at current time
         self._Uall = np.nan  # translational velocity at current time
         self._relationHandle = relationClass._baseRelation()
+        self._pick_filename = '...'
 
         # parameters for temporal evaluation.
-        self._comm = PETSc.COMM_SELF
+        self._comm = PETSc.COMM_WORLD
         self._save_every = 1
         self._tqdm_fun = tqdm_fun
         self._tqdm = None
@@ -39,6 +45,7 @@ class _baseProblem(baseClass.baseObj):
         self._update_order = (1e-6, 1e-9)  # rtol, atol
         self._t0 = 0  # simulation time in the range (t0, t1)
         self._t1 = -1  # simulation time in the range (t0, t1)
+        self._eval_dt = -1  # \delta_t, simulation
         self._max_it = -1  # iteration loop no more than max_it
         self._percentage = 0  # percentage of time depend solver.
         self._t_hist = []
@@ -90,6 +97,14 @@ class _baseProblem(baseClass.baseObj):
         self._Wall = Wall
 
     @property
+    def Xall(self):
+        return self._Xall
+
+    @Xall.setter
+    def Xall(self, Xall):
+        self._Xall = Xall
+
+    @property
     def relationHandle(self):
         return self._relationHandle
 
@@ -124,8 +139,10 @@ class _baseProblem(baseClass.baseObj):
         return self._tqdm
 
     @tqdm.setter
-    def tqdm(self, tqdm):
-        self._tqdm = tqdm
+    def tqdm(self, mytqdm):
+        err_msg = 'wrong parameter type tqdm. '
+        assert isinstance(mytqdm, tqdm), err_msg
+        self._tqdm = mytqdm
 
     @property
     def update_fun(self):
@@ -169,6 +186,14 @@ class _baseProblem(baseClass.baseObj):
     @t1.setter
     def t1(self, t1):
         self._t1 = t1
+
+    @property
+    def eval_dt(self):
+        return self._eval_dt
+
+    @eval_dt.setter
+    def eval_dt(self, eval_dt):
+        self._eval_dt = eval_dt
 
     @property
     def max_it(self):
@@ -248,14 +273,24 @@ class _baseProblem(baseClass.baseObj):
         # pass
 
     def update_prepare(self):
+        self.Xall = np.vstack([objj.X for objj in self.obj_list])
+        # self.Uall = np.vstack([objj.U for objj in self.obj_list])
+        # self.Wall = np.vstack([objj.W for objj in self.obj_list])
+        self.update_step()
+        for acti in self.action_list:  # type: interactionClass._baseAction
+            acti.update_prepare()
+        self.check_self()
+        self.print_info()
+        return True
+
+    def update_step(self):
         self.relationHandle.update_relation()
         self.relationHandle.update_neighbor()
-        for acti in self.action_list:  # type: interactionClass._baseAction
-            acti.set_dmda()
+        self.relationHandle.check_self()
         return True
 
     def update_UWall(self, F):
-        self.update_prepare()
+        self.update_step()
         F.zeroEntries()
         # PETSc.Sys.Print(F.getArray())
         # print(F.getArray())
@@ -280,17 +315,17 @@ class _baseProblem(baseClass.baseObj):
         return True
 
     def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
-        self.check_self()
-        # comm = self.comm
-        # dbg
-        comm = PETSc.COMM_WORLD
+        comm = self.comm
         (rtol, atol) = self.update_order
         update_fun = self.update_fun
         tqdm_fun = self.tqdm_fun
-        self.tqdm = tqdm_fun(total=100)
+        self.t1 = t0
         self.t1 = t1
+        self.eval_dt = eval_dt
         self.max_it = max_it
         self.percentage = 0
+        self.update_prepare()
+        self.tqdm = tqdm_fun(total=100)
 
         # do simulation
         y0 = self._get_y0()
@@ -323,16 +358,17 @@ class _baseProblem(baseClass.baseObj):
         return True
 
     @abc.abstractmethod
-    def update_obj_position(self, **kwargs):
+    def update_position(self, **kwargs):
         return
 
     @abc.abstractmethod
-    def update_obj_velocity(self, **kwargs):
+    def update_velocity(self, **kwargs):
         return
 
-    @abc.abstractmethod
-    def update_obj_hist(self, **kwargs):
-        return
+    def update_hist(self, **kwargs):
+        for obji in self.obj_list:
+            obji.do_store_data()
+        return True
 
     @abc.abstractmethod
     def _get_y0(self, **kwargs):
@@ -342,24 +378,40 @@ class _baseProblem(baseClass.baseObj):
     def _rhsfunction(self, ts, t, Y, F):
         return
 
-    @abc.abstractmethod
     def _do_store_data(self, ts, i, t, Y):
-        return
+        if t > self.max_it:
+            return False
+        else:
+            dt = ts.getTimeStep()
+            self.t_hist.append(t)
+            self.dt_hist.append(dt)
+            self.update_hist()
+            return True
 
-    @abc.abstractmethod
     def _monitor(self, ts, i, t, Y):
-        return
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
+        save_every = self._save_every
+        # print(ts.getTimeStep())
+        if not i % save_every:
+            percentage = np.clip(t / self._t1 * 100, 0, 100)
+            dp = int(percentage - self._percentage)
+            if (dp >= 1) and (rank == 0):
+                self._tqdm.update(dp)
+                self._percentage = self._percentage + dp
+            self._do_store_data(ts, i, t, Y)
+        return True
 
     @abc.abstractmethod
     def _postfunction(self, ts):
         return
 
     def update_finish(self, ts):
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
-        if rank == 0:
-            self._tqdm.update(100 - self._percentage)
-            self._tqdm.close()
+        # comm = PETSc.COMM_WORLD.tompi4py()
+        # rank = comm.Get_rank()
+        # if rank == 0:
+        self._tqdm.update(100 - self._percentage)
+        self._tqdm.close()
         self._t_hist = np.hstack(self.t_hist)
         self._dt_hist = np.hstack(self.dt_hist)
         # i = ts.getStepNumber()
@@ -372,14 +424,80 @@ class _baseProblem(baseClass.baseObj):
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.update_finish()
         self.relationHandle.check_self()
+
+        PETSc.Sys.Print()
+        PETSc.Sys.Print('Solve, finish time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        return True
+
+    def _destroy_problem(self):
+        self._comm = None
+        self._tqdm = None
+        pass
+
+    def destroy_self(self):
+        self._destroy_problem()
+        for obji in self.obj_list:  # type: particleClass._baseParticle
+            obji.destroy_self()
+        for acti in self.action_list:  # type: interactionClass._baseAction
+            acti.destroy_self()
+        self.relationHandle.destroy_self()
+        return True
+
+    def pickmyself(self, filename: str):
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
+        self.destroy_self()
+        self._pick_filename = filename
+
+        # dbg
+        # print('dbg')
+        # self._obj_list = None
+        # self._action_list = None
+        # self._relationHandle = None
+        if rank == 0:
+            with open(filename, 'wb') as handle:
+                pickle.dump(self, handle, protocol=4)
+        return True
+
+    def print_self_info(self):
+        PETSc.Sys.Print('  rotational noise: %f, translational noise: %f' %
+                        (self.rot_noise, self.trs_noise))
+
+    def print_info(self):
+        # OptDB = PETSc.Options()
+        PETSc.Sys.Print()
+        PETSc.Sys.Print('Information about %s (%s): ' % (str(self), self.type,))
+        PETSc.Sys.Print('  This is a %d dimensional problem, contain %d objects. ' %
+                        (self.dimension, self.n_obj))
+        PETSc.Sys.Print('  update function: %s, update order: %s, max loop: %d' %
+                        (self.update_fun, self.update_order, self.max_it))
+        PETSc.Sys.Print('  t0=%f, t1=%f, dt=%f' %
+                        (self.t0, self.t1, self.eval_dt))
+        self.print_self_info()
+
+        for acti in self.action_list:  # type: interactionClass._baseAction
+            acti.print_info()
+        self.relationHandle.print_info()
+
+        PETSc.Sys.Print()
+        PETSc.Sys.Print('Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         return True
 
 
 class _base2DProblem(_baseProblem):
     def __init__(self, name='...', **kwargs):
         super().__init__(name, **kwargs)
+        self._Phiall = np.nan
         self._dimension = 2  # 2 for 2D
         self._action_list = uniqueList(acceptType=interactionClass._baseAction2D)  # contain rotational interactions
+
+    @property
+    def Phiall(self):
+        return self._Phiall
+
+    @Phiall.setter
+    def Phiall(self, Phiall):
+        self._Phiall = Phiall
 
     def _check_add_obj(self, obj):
         super()._check_add_obj(obj)
@@ -387,26 +505,25 @@ class _base2DProblem(_baseProblem):
         assert isinstance(obj, particleClass.particle2D), err_msg
         return True
 
-    def update_obj_position(self, X_all, phi_all, **kwargs):
+    def update_prepare(self):
+        self.Phiall = np.vstack([objj.phi for objj in self.obj_list])
+        super().update_prepare()
+        return True
+
+    def update_position(self, **kwargs):
         obji: particleClass.particle2D
         Xi: np.ndarray
         phii: np.ndarray
-        for obji, Xi, phii in zip(self.obj_list, X_all.reshape((-1, 2)), phi_all):
+        for obji, Xi, phii in zip(self.obj_list, self.Xall, self.Phiall):
             obji.update_position(Xi, phii)
         return True
 
-    def update_obj_velocity(self, Uall, Wall, **kwargs):
+    def update_velocity(self, **kwargs):
         obji: particleClass.particle2D
         Uall: np.ndarray
         Wall: np.ndarray
-        for obji, Ui, Wi in zip(self.obj_list, Uall.reshape((-1, 2)), Wall):
+        for obji, Ui, Wi in zip(self.obj_list, self.Uall, self.Wall):
             obji.update_velocity(Ui, Wi)
-        return True
-
-    def update_obj_hist(self, **kwargs):
-        obji: particleClass.particle2D
-        for obji in self.obj_list:
-            obji.do_store_data()
         return True
 
     def _get_y0(self, **kwargs):
@@ -431,10 +548,13 @@ class _base2DProblem(_baseProblem):
         #   Y = [X_all, phi_all]
         #   F = [U_all, W_all]
         X_all, phi_all = self.Y2Xphi(Y)
-        self.update_obj_position(X_all, phi_all)
+        self.Xall, self.Phiall = X_all.reshape((-1, 2)), phi_all
+        self.update_position()
         self.update_UWall(F)
         tF = self.vec_scatter(F)
-        self.update_obj_velocity(tF[:self.dimension * self.n_obj], tF[self.dimension * self.n_obj:])
+        self.Uall = tF[:self.dimension * self.n_obj].reshape((-1, 2))
+        self.Wall = tF[self.dimension * self.n_obj:]
+        self.update_velocity()
         # F.assemble()
         # PETSc.Sys.Print()
         # PETSc.Sys.Print('dbg', t)
@@ -444,31 +564,6 @@ class _base2DProblem(_baseProblem):
         # PETSc.Sys.Print('%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
         #     F.getArray()[0], F.getArray()[1], F.getArray()[2],
         #     F.getArray()[3], F.getArray()[4], F.getArray()[5], ))
-        return True
-
-    def _do_store_data(self, ts, i, t, Y):
-        if t > self.max_it:
-            return False
-        else:
-            dt = ts.getTimeStep()
-            self.t_hist.append(t)
-            self.dt_hist.append(dt)
-            # self.update_obj_velocity(self.Uall, self.Wall)
-            self.update_obj_hist()
-            return True
-
-    def _monitor(self, ts, i, t, Y):
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
-        save_every = self._save_every
-        # print(ts.getTimeStep())
-        if not i % save_every:
-            percentage = np.clip(t / self._t1 * 100, 0, 100)
-            dp = int(percentage - self._percentage)
-            if (dp >= 1) and (rank == 0):
-                self._tqdm.update(dp)
-                self._percentage = self._percentage + dp
-            self._do_store_data(ts, i, t, Y)
         return True
 
     def _postfunction(self, ts):
@@ -517,7 +612,14 @@ class behavior2DProblem(_base2DProblem):
         super().add_obj(obj)
         obj.attract = self.attract
         obj.align = self.align
+        obj.rot_noise = self.rot_noise
+        obj.trs_noise = self.trs_noise
         return True
+
+    def print_self_info(self):
+        super().print_self_info()
+        PETSc.Sys.Print('  align: %f, attract: %f' %
+                        (self.align, self.attract))
 
 
 class behaviorFiniteDipole2DProblem(behavior2DProblem, finiteDipole2DProblem):

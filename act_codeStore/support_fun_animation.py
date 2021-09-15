@@ -7,49 +7,51 @@ Created on 20210906
 @author: Zhang Ji
 """
 
-import matplotlib
-import subprocess
+# import matplotlib
+# import subprocess
 import os
 import numpy as np
-import pandas as pd
-from scipy.io import loadmat
-from scipy import interpolate, integrate, spatial, signal
-from scipy.optimize import leastsq, curve_fit
+# import pandas as pd
+# from scipy.io import loadmat
+from scipy import interpolate  # , integrate, spatial, signal
+# from scipy.optimize import leastsq, curve_fit
 from matplotlib import animation
 from matplotlib import pyplot as plt
 # from mpl_toolkits.axes_grid1 import colorbar
-from matplotlib import colorbar
-from mpl_toolkits.mplot3d.art3d import Line3DCollection
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes, zoomed_inset_axes
-import matplotlib.ticker as mtick
-from matplotlib import colors as mcolors
-import importlib
-import inspect
-from tqdm import tqdm
+# from matplotlib import colorbar
+# from mpl_toolkits.mplot3d.art3d import Line3DCollection
+# from mpl_toolkits.axes_grid1.inset_locator import inset_axes, zoomed_inset_axes
+# import matplotlib.ticker as mtick
+# from matplotlib import colors as mcolors
+# import importlib
+# import inspect
+# from tqdm import tqdm
 from tqdm.notebook import tqdm as tqdm_notebook
-import glob
-import natsort
-from time import time
-import pickle
-import re
-import shutil
-import multiprocessing
+# import glob
+# import natsort
+# from time import time
+# import pickle
+# import re
+# import shutil
+# import multiprocessing
 import warnings
 
-from act_codeStore import support_fun as spf
-from act_codeStore.support_class import *
+# from act_codeStore import support_fun as spf
+# from act_codeStore.support_class import *
 # from act_act_src import baseClass
-from act_src import particleClass
-from act_src import interactionClass
-from act_src import problemClass
-from act_src import relationClass
+# from act_src import particleClass
+# from act_src import interactionClass
+# from act_src import problemClass
+# from act_src import relationClass
 
 PWD = os.getcwd()
 np.set_printoptions(linewidth=110, precision=5)
 
-params = {'animation.html': 'html5',
-          'font.family': 'sans-serif',
-          'font.size': 15, }
+params = {
+    'animation.html': 'html5',
+    'font.family':    'sans-serif',
+    'font.size':      15,
+}
 preamble = r' '
 preamble = preamble + '\\usepackage{bm} '
 preamble = preamble + '\\usepackage{amsmath} '

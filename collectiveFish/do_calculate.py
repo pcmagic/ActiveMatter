@@ -5,7 +5,7 @@ import petsc4py
 # matplotlib.use('agg')
 petsc4py.init(sys.argv)
 
-import numpy as np
+# import numpy as np
 # import pickle
 # from time import time
 from petsc4py import PETSc
@@ -23,28 +23,32 @@ from act_codeStore import support_fun_calculate as spc
 # get kwargs
 def get_problem_kwargs(**main_kwargs):
     calculate_fun_dict = {
-        'do_FiniteDipole2D':       spc.do_FiniteDipole2D,
-        'do_LimFiniteDipole2D':    spc.do_LimFiniteDipole2D,
-        'do_behaviorParticle2D':   spc.do_behaviorParticle2D,
-        'do_actLimFiniteDipole2D': spc.do_actLimFiniteDipole2D,
+        'do_FiniteDipole2D':           spc.do_FiniteDipole2D,
+        'do_LimFiniteDipole2D':        spc.do_LimFiniteDipole2D,
+        'do_behaviorParticle2D':       spc.do_behaviorParticle2D,
+        'do_behaviorWienerParticle2D': spc.do_behaviorWienerParticle2D,
+        'do_actLimFiniteDipole2D':     spc.do_actLimFiniteDipole2D,
     }
     prbHandle_dict = {
-        'do_FiniteDipole2D':       problemClass.finiteDipole2DProblem,
-        'do_LimFiniteDipole2D':    problemClass.limFiniteDipole2DProblem,
-        'do_behaviorParticle2D':   problemClass.behavior2DProblem,
-        'do_actLimFiniteDipole2D': problemClass.actLimFiniteDipole2DProblem,
+        'do_FiniteDipole2D':           problemClass.finiteDipole2DProblem,
+        'do_LimFiniteDipole2D':        problemClass.limFiniteDipole2DProblem,
+        'do_behaviorParticle2D':       problemClass.behavior2DProblem,
+        'do_behaviorWienerParticle2D': problemClass.behavior2DProblem,
+        'do_actLimFiniteDipole2D':     problemClass.actLimFiniteDipole2DProblem,
     }
     rltHandle_dict = {
-        'do_FiniteDipole2D':       relationClass.finiteRelation2D,
-        'do_LimFiniteDipole2D':    relationClass.limFiniteRelation2D,
-        'do_behaviorParticle2D':   relationClass.VoronoiBaseRelation2D,
-        'do_actLimFiniteDipole2D': relationClass.VoronoiBaseRelation2D,
+        'do_FiniteDipole2D':           relationClass.finiteRelation2D,
+        'do_LimFiniteDipole2D':        relationClass.limFiniteRelation2D,
+        'do_behaviorParticle2D':       relationClass.VoronoiBaseRelation2D,
+        'do_behaviorWienerParticle2D': relationClass.VoronoiBaseRelation2D,
+        'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
     }
     ptcHandle_dict = {
-        'do_FiniteDipole2D':       particleClass.finiteDipole2D,
-        'do_LimFiniteDipole2D':    particleClass.limFiniteDipole2D,
-        'do_behaviorParticle2D':   particleClass.particle2D,
-        'do_actLimFiniteDipole2D': particleClass.limFiniteDipole2D,
+        'do_FiniteDipole2D':           particleClass.finiteDipole2D,
+        'do_LimFiniteDipole2D':        particleClass.limFiniteDipole2D,
+        'do_behaviorParticle2D':       particleClass.particle2D,
+        'do_behaviorWienerParticle2D': particleClass.particle2D,
+        'do_actLimFiniteDipole2D':     particleClass.limFiniteDipole2D,
     }
 
     OptDB = PETSc.Options()
@@ -56,7 +60,7 @@ def get_problem_kwargs(**main_kwargs):
     atol = np.float64(OptDB.getReal('atol', 1e-6))
     eval_dt = np.float64(OptDB.getReal('eval_dt', 0.01))
     calculate_fun = OptDB.getString('calculate_fun', 'do_behaviorParticle2D')
-    fileHandle = OptDB.getString('f', '')
+    fileHandle = OptDB.getString('f', 'dbg')
     save_every = np.float64(OptDB.getReal('save_every', 1))
 
     nptc = np.int64(OptDB.getInt('nptc', 5))
@@ -66,6 +70,8 @@ def get_problem_kwargs(**main_kwargs):
     Xlim = np.float64(OptDB.getReal('Xlim', 3))
     attract = np.float64(OptDB.getReal('attract', 0))
     align = np.float64(OptDB.getReal('align', 0))
+    rot_noise = np.float64(OptDB.getReal('rot_noise', 0))
+    trs_noise = np.float64(OptDB.getReal('trs_noise', 0))
     seed0 = OptDB.getBool('seed0', False)
 
     err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
@@ -92,6 +98,8 @@ def get_problem_kwargs(**main_kwargs):
         'Xlim':            Xlim,
         'attract':         attract,
         'align':           align,
+        'rot_noise':       rot_noise,
+        'trs_noise':       trs_noise,
         'seed':            seed,
         'tqdm_fun':        tqdm,
     }
@@ -101,6 +109,12 @@ def get_problem_kwargs(**main_kwargs):
         for key in t_kwargs:
             problem_kwargs[key] = t_kwargs[key]
     return problem_kwargs
+
+
+def do_pickle(prb1: problemClass._baseProblem, **kwargs):
+    fileHandle = kwargs['fileHandle']
+    prb1.pickmyself('%s.pickle' % fileHandle)
+    return True
 
 
 @profile(filename="profile_out")
@@ -117,10 +131,7 @@ def main_fun(**main_kwargs):
     # PETSc.Sys.Print(problem_kwargs)
     doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
     prb1 = doPrb1.do_calculate(ini_t=ini_t, max_t=max_t, eval_dt=eval_dt, )
-    # for obji in prb1.obj_list:
-    #     PETSc.Sys.Print('dbg, obji.X', obji.X)
-    a = prb1.polar
-    print(a)
+    do_pickle(prb1, **problem_kwargs)
     return True
 
 

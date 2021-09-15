@@ -30,6 +30,8 @@ class _baseParticle(baseClass.baseObj):
         # self._q = np.nan # q is a quaternion(w, x, y, z), where w=cos(theta/2). For 3D version
         self._attract = 0  # attract intensity
         self._align = 0  # align intensity
+        self._rot_noise = 0  # rotational noise
+        self._trs_noise = 0  # translational noise
         self._dipole = 0  # dipole intensity
         self._neighbor_list = uniqueList(acceptType=_baseParticle)
         # print(self._name)
@@ -142,6 +144,22 @@ class _baseParticle(baseClass.baseObj):
         self._align = align
 
     @property
+    def rot_noise(self):
+        return self._rot_noise
+
+    @rot_noise.setter
+    def rot_noise(self, rot_noise):
+        self._rot_noise = rot_noise
+
+    @property
+    def trs_noise(self):
+        return self._trs_noise
+
+    @trs_noise.setter
+    def trs_noise(self, trs_noise):
+        self._trs_noise = trs_noise
+
+    @property
     def dipole(self):
         return self._dipole
 
@@ -176,7 +194,7 @@ class _baseParticle(baseClass.baseObj):
     def do_store_data(self, **kwargs):
         return True
 
-    def check_self(self):
+    def check_self(self, **kwargs):
         err_msg = 'wrong parameter value: %s '
 
         assert self.index >= 0, err_msg % 'index'
@@ -274,7 +292,7 @@ class particle2D(_baseParticle):
         self.W_hist.append(self.W.copy())
         return True
 
-    def check_self(self):
+    def check_self(self, **kwargs):
         super().check_self()
         err_msg = 'wrong parameter value: %s '
         assert self.dimension in (2,), err_msg % 'dimension'
@@ -376,7 +394,7 @@ class finiteDipole2D(particle2D):
         U = self.u * self.P1
         return U
 
-    def check_self(self):
+    def check_self(self, **kwargs):
         super().check_self()
         err_msg = 'wrong parameter value: %s '
         assert np.isfinite(self.length), err_msg % 'length'

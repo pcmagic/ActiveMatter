@@ -70,5 +70,5 @@ prb1.add_act(act1)
 act2 = interactionClass.limFiniteDipole2D(name='limFiniteDipole2D')
 prb1.add_act(act2)
 
-prb1.update_prepare()
+prb1.update_step()
 prb1.update_self(t1=tmax)

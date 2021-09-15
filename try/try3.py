@@ -39,7 +39,7 @@ prb1.add_act(act3)
 act4 = interactionClass.Align2D(name='Align2D')
 prb1.add_act(act4)
 
-prb1.update_prepare()
+prb1.update_step()
 # prb1.relationHandle.dbg_showVoronoi()
 prb1.update_self(t1=tmax)
 #

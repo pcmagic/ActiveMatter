@@ -5,14 +5,18 @@ Zhang Ji
 
 global perspective, handle the positional (and other external) relationships.
 """
+from petsc4py import PETSc
 import abc
 import numpy as np
+import scipy as scp
 from scipy.spatial import Voronoi
 # from petsc4py import PETSc
 from act_src import baseClass
 from act_src import particleClass
 from act_src import problemClass
-from act_codeStore import support_fun as spf
+
+
+# from act_codeStore import support_fun as spf
 
 
 # from act_codeStore.support_class import *
@@ -22,7 +26,7 @@ from act_codeStore import support_fun as spf
 
 class _baseRelation(baseClass.baseObj):
     @abc.abstractmethod
-    def check_self(self):
+    def check_self(self, **kwargs):
         return
 
     # @abc.abstractmethod
@@ -32,6 +36,11 @@ class _baseRelation(baseClass.baseObj):
     @abc.abstractmethod
     def update_neighbor(self, **kwargs):
         return
+
+    def print_info(self):
+        super().print_info()
+        PETSc.Sys.Print('  None')
+        return True
 
 
 class _baseRelation2D(_baseRelation):
@@ -75,7 +84,7 @@ class _baseRelation2D(_baseRelation):
         assert t1.all(), err_msg
         return True
 
-    def check_self(self):
+    def check_self(self, **kwargs):
         self._check_overlap()
         return True
 
@@ -150,6 +159,11 @@ class _baseRelation2D(_baseRelation):
     def update_neighbor(self, **kwargs):
         pass
 
+    def print_info(self):
+        baseClass.baseObj.print_info(self)
+        PETSc.Sys.Print('  overlap_epsilon=%f' % self.overlap_epsilon)
+        return True
+
 
 class finiteRelation2D(_baseRelation2D):
     def cal_rho(self):
@@ -175,18 +189,20 @@ class limFiniteRelation2D(finiteRelation2D):
 class VoronoiBaseRelation2D(_baseRelation2D):
     def cal_theta_rho(self):
         prb = self.father  # type: problemClass._baseProblem
-        theta_ij, rho_ij = [], [],
+        theta_ij, rho_ij = [], []
+        theta_ij, rho_ij = np.zeros((prb.n_obj, prb.n_obj)), np.zeros((prb.n_obj, prb.n_obj)),
         obji: particleClass.particle2D
-        for obji in prb.obj_list:
-            tPij = np.vstack([objj.X - obji.X for objj in prb.obj_list])
+        for i0, obji in enumerate(prb.obj_list):
+            tPij = prb.Xall - obji.X
+            # tPij = np.vstack([objj.X - obji.X for objj in prb.obj_list])
             # tPji = -tPij
             tphi_rhoij = np.arctan2(tPij[:, 1], tPij[:, 0])
             trhoij = np.linalg.norm(tPij, axis=-1)
-            rho_ij.append(trhoij)
-            # theta_ij.append(spf.warpToPi(tphi_rhoij - obji.phi))
-            theta_ij.append(tphi_rhoij - obji.phi)
-            # print(tphi_rhoij - obji.phi)
-            # print(theta_ij[-1])
+            # trhoij = scp.linalg.norm(tPij, axis=-1)
+            # rho_ij.append(trhoij)
+            # theta_ij.append(tphi_rhoij - obji.phi)
+            rho_ij[i0, :] = trhoij
+            theta_ij[i0, :] = tphi_rhoij - obji.phi
         self._rho_ij = np.vstack(rho_ij)
         self._theta_ij = np.vstack(theta_ij)
         return True
@@ -209,10 +225,17 @@ class VoronoiBaseRelation2D(_baseRelation2D):
         obji: particleClass.particle2D
         for obji, idxi_X2ridge in zip(prb.obj_list, idx_X2ridge):
             obji.neighbor_list.clear()
-            idx_X = np.hstack([idx_ridge2X[i0] for i0 in idxi_X2ridge])
-            tidx = np.logical_not(np.isclose(idx_X, obji.index))
-            for i0 in idx_X[tidx]:
-                obji.neighbor_list.append_noCheck(prb.obj_list[i0])
+            # idx_X = np.hstack([idx_ridge2X[i0] for i0 in idxi_X2ridge])
+            # tidx = np.logical_not(np.isclose(idx_X, obji.index))
+            # for i0 in idx_X[tidx]:
+            #     obji.neighbor_list.append_noCheck(prb.obj_list[i0])
+            # for i0 in [idx_ridge2X[i0] for i0 in idxi_X2ridge]:
+            for i0 in idxi_X2ridge:
+                t1 = idx_ridge2X[i0]
+                if t1[0] == obji.index:
+                    obji.neighbor_list.append_noCheck(prb.obj_list[t1[1]])
+                else:
+                    obji.neighbor_list.append_noCheck(prb.obj_list[t1[0]])
         return True
 
     def dbg_showVoronoi(self, **kwargs):
