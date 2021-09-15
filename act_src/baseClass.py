@@ -7,6 +7,7 @@ general features of the classes.
 
 # import numpy as np
 from petsc4py import PETSc
+from act_codeStore import support_fun as spf
 
 
 # import pickle
@@ -55,8 +56,8 @@ class baseObj:
 
     def print_info(self):
         # OptDB = PETSc.Options()
-        PETSc.Sys.Print()
-        PETSc.Sys.Print('Information about %s (%s): ' % (str(self), self.type,))
+        spf.petscInfo(self.father.logger, ' ')
+        spf.petscInfo(self.father.logger, 'Information about %s (%s): ' % (str(self), self.type,))
         return True
 
     @staticmethod

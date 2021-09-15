@@ -128,7 +128,7 @@ def main_fun(**main_kwargs):
     ini_t = problem_kwargs['ini_t']
     eval_dt = problem_kwargs['eval_dt']
 
-    # PETSc.Sys.Print(problem_kwargs)
+    # spf.petscInfo(self.father.logger, problem_kwargs)
     doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
     prb1 = doPrb1.do_calculate(ini_t=ini_t, max_t=max_t, eval_dt=eval_dt, )
     do_pickle(prb1, **problem_kwargs)

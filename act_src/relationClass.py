@@ -14,6 +14,7 @@ from scipy.spatial import Voronoi
 from act_src import baseClass
 from act_src import particleClass
 from act_src import problemClass
+from act_codeStore import support_fun as spf
 
 
 # from act_codeStore import support_fun as spf
@@ -39,7 +40,7 @@ class _baseRelation(baseClass.baseObj):
 
     def print_info(self):
         super().print_info()
-        PETSc.Sys.Print('  None')
+        spf.petscInfo(self.father.logger, '  None')
         return True
 
 
@@ -161,7 +162,7 @@ class _baseRelation2D(_baseRelation):
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        PETSc.Sys.Print('  overlap_epsilon=%f' % self.overlap_epsilon)
+        spf.petscInfo(self.father.logger, '  overlap_epsilon=%f' % self.overlap_epsilon)
         return True
 
 

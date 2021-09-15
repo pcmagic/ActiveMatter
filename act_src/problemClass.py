@@ -7,17 +7,20 @@ problem class, organize the problem.
 """
 import abc
 import pickle
+import logging
 from tqdm import tqdm
 import numpy as np
 from tqdm.notebook import tqdm as tqdm_notebook
 from petsc4py import PETSc
 from datetime import datetime
+import time
 
 from act_src import baseClass
 from act_src import particleClass
 from act_src import interactionClass
 from act_src import relationClass
 from act_codeStore.support_class import *
+from act_codeStore import support_fun as spf
 
 
 class _baseProblem(baseClass.baseObj):
@@ -35,6 +38,13 @@ class _baseProblem(baseClass.baseObj):
         self._Uall = np.nan  # translational velocity at current time
         self._relationHandle = relationClass._baseRelation()
         self._pick_filename = '...'
+        self._logger = logging.getLogger()
+        logging.basicConfig(handlers=[logging.FileHandler(filename='%s.log' % self.name, mode='w'),
+                                      logging.StreamHandler()],
+                            level=logging.INFO, format='%(message)s', )
+        time.sleep(0.1)
+        spf.petscInfo(self.logger, ' ')
+        spf.petscInfo(self.logger, 'Collective motion solve, Zhang Ji, 2021. ')
 
         # parameters for temporal evaluation.
         self._comm = PETSc.COMM_WORLD
@@ -113,6 +123,10 @@ class _baseProblem(baseClass.baseObj):
         self._check_relationHandle(relationHandle)
         relationHandle.father = self
         self._relationHandle = relationHandle
+
+    @property
+    def logger(self):
+        return self._logger
 
     @property
     def comm(self):
@@ -292,13 +306,13 @@ class _baseProblem(baseClass.baseObj):
     def update_UWall(self, F):
         self.update_step()
         F.zeroEntries()
-        # PETSc.Sys.Print(F.getArray())
+        # spf.petscInfo(self.logger, F.getArray())
         # print(F.getArray())
         for action in self.action_list:
             action.update_action(F)
             # F.assemble()
         F.assemble()
-        # PETSc.Sys.Print(F.getArray())
+        # spf.petscInfo(self.logger, F.getArray())
         return True
 
     def check_self(self, **kwargs):
@@ -316,6 +330,7 @@ class _baseProblem(baseClass.baseObj):
 
     def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
         comm = self.comm
+        rank = comm.tompi4py().Get_rank()
         (rtol, atol) = self.update_order
         update_fun = self.update_fun
         tqdm_fun = self.tqdm_fun
@@ -325,7 +340,8 @@ class _baseProblem(baseClass.baseObj):
         self.max_it = max_it
         self.percentage = 0
         self.update_prepare()
-        self.tqdm = tqdm_fun(total=100)
+        if rank == 0:
+            self.tqdm = tqdm_fun(total=100)
 
         # do simulation
         y0 = self._get_y0()
@@ -395,10 +411,10 @@ class _baseProblem(baseClass.baseObj):
         # print(ts.getTimeStep())
         if not i % save_every:
             percentage = np.clip(t / self._t1 * 100, 0, 100)
-            dp = int(percentage - self._percentage)
+            dp = int(percentage - self.percentage)
             if (dp >= 1) and (rank == 0):
-                self._tqdm.update(dp)
-                self._percentage = self._percentage + dp
+                self.tqdm.update(dp)
+                self.percentage = self.percentage + dp
             self._do_store_data(ts, i, t, Y)
         return True
 
@@ -407,11 +423,11 @@ class _baseProblem(baseClass.baseObj):
         return
 
     def update_finish(self, ts):
-        # comm = PETSc.COMM_WORLD.tompi4py()
-        # rank = comm.Get_rank()
-        # if rank == 0:
-        self._tqdm.update(100 - self._percentage)
-        self._tqdm.close()
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
+        if rank == 0:
+            self.tqdm.update(100 - self.percentage)
+            self.tqdm.close()
         self._t_hist = np.hstack(self.t_hist)
         self._dt_hist = np.hstack(self.dt_hist)
         # i = ts.getStepNumber()
@@ -425,13 +441,17 @@ class _baseProblem(baseClass.baseObj):
             acti.update_finish()
         self.relationHandle.check_self()
 
-        PETSc.Sys.Print()
-        PETSc.Sys.Print('Solve, finish time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        time.sleep(0.1)
+        spf.petscInfo(self.logger, ' ')
+        spf.petscInfo(self.logger, 'Solve, finish time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         return True
 
     def _destroy_problem(self):
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
         self._comm = None
-        self._tqdm = None
+        if rank == 0:
+            self._tqdm = None
         pass
 
     def destroy_self(self):
@@ -460,27 +480,27 @@ class _baseProblem(baseClass.baseObj):
         return True
 
     def print_self_info(self):
-        PETSc.Sys.Print('  rotational noise: %f, translational noise: %f' %
-                        (self.rot_noise, self.trs_noise))
+        spf.petscInfo(self.logger, '  rotational noise: %f, translational noise: %f' %
+                      (self.rot_noise, self.trs_noise))
 
     def print_info(self):
         # OptDB = PETSc.Options()
-        PETSc.Sys.Print()
-        PETSc.Sys.Print('Information about %s (%s): ' % (str(self), self.type,))
-        PETSc.Sys.Print('  This is a %d dimensional problem, contain %d objects. ' %
-                        (self.dimension, self.n_obj))
-        PETSc.Sys.Print('  update function: %s, update order: %s, max loop: %d' %
-                        (self.update_fun, self.update_order, self.max_it))
-        PETSc.Sys.Print('  t0=%f, t1=%f, dt=%f' %
-                        (self.t0, self.t1, self.eval_dt))
+        spf.petscInfo(self.logger, ' ')
+        spf.petscInfo(self.logger, 'Information about %s (%s): ' % (str(self), self.type,))
+        spf.petscInfo(self.logger, '  This is a %d dimensional problem, contain %d objects. ' %
+                      (self.dimension, self.n_obj))
+        spf.petscInfo(self.logger, '  update function: %s, update order: %s, max loop: %d' %
+                      (self.update_fun, self.update_order, self.max_it))
+        spf.petscInfo(self.logger, '  t0=%f, t1=%f, dt=%f' %
+                      (self.t0, self.t1, self.eval_dt))
         self.print_self_info()
 
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.print_info()
         self.relationHandle.print_info()
 
-        PETSc.Sys.Print()
-        PETSc.Sys.Print('Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        spf.petscInfo(self.logger, ' ')
+        spf.petscInfo(self.logger, 'Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         return True
 
 
@@ -556,12 +576,12 @@ class _base2DProblem(_baseProblem):
         self.Wall = tF[self.dimension * self.n_obj:]
         self.update_velocity()
         # F.assemble()
-        # PETSc.Sys.Print()
-        # PETSc.Sys.Print('dbg', t)
-        # PETSc.Sys.Print('%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
+        # spf.petscInfo(self.logger, ' ')
+        # spf.petscInfo(self.logger, 'dbg', t)
+        # spf.petscInfo(self.logger, '%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
         #     Y.getArray()[0], Y.getArray()[1], Y.getArray()[2],
         #     Y.getArray()[3], Y.getArray()[4], Y.getArray()[5], ))
-        # PETSc.Sys.Print('%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
+        # spf.petscInfo(self.logger, '%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
         #     F.getArray()[0], F.getArray()[1], F.getArray()[2],
         #     F.getArray()[3], F.getArray()[4], F.getArray()[5], ))
         return True
@@ -618,8 +638,8 @@ class behavior2DProblem(_base2DProblem):
 
     def print_self_info(self):
         super().print_self_info()
-        PETSc.Sys.Print('  align: %f, attract: %f' %
-                        (self.align, self.attract))
+        spf.petscInfo(self.logger, '  align: %f, attract: %f' %
+                      (self.align, self.attract))
 
 
 class behaviorFiniteDipole2DProblem(behavior2DProblem, finiteDipole2DProblem):

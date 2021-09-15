@@ -14,7 +14,7 @@ from act_src import particleClass
 from act_src import problemClass
 from act_src import relationClass
 from act_codeStore.support_class import *
-
+from act_codeStore import support_fun as spf
 
 # from act_codeStore.support_class import *
 
@@ -97,7 +97,7 @@ class _baseAction(baseClass.baseObj):
 
     def print_info(self):
         super().print_info()
-        PETSc.Sys.Print('  None')
+        spf.petscInfo(self.father.logger, '  None')
         return True
 
 
@@ -299,5 +299,5 @@ class Wiener2D(_baseAction2D):
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        PETSc.Sys.Print('  sqrt_dt=%f' % self.sqrt_dt)
+        spf.petscInfo(self.father.logger, '  sqrt_dt=%f' % self.sqrt_dt)
         return True

@@ -1,19 +1,20 @@
 import sys
+import copy
 from collections import UserList
 import numpy as np
-import copy
-from petsc4py import PETSc
-
 # from scipy.spatial.transform import Rotation as spR
+from matplotlib.ticker import Locator
+from matplotlib.patches import FancyArrowPatch
+from mpl_toolkits.mplot3d.proj3d import proj_transform
+from mpl_toolkits.mplot3d.axes3d import Axes3D
+from matplotlib.colors import Normalize
+from petsc4py import PETSc
+from act_codeStore.support_fun import Rloc2glb
 
 __all__ = ['uniqueList', 'typeList', 'intList', 'floatList',
            'abs_comp', 'abs_construct_matrix',
-           'check_file_extension', 'mpiprint', 'fullprint',
+           'fullprint',
            'coordinate_transformation',
-           'tube_flatten',
-           'get_rot_matrix', 'rot_vec2rot_mtx', 'vector_rotation_norm', 'vector_rotation',
-           'rotMatrix_DCM', 'Rloc2glb',
-           'Adams_Moulton_Methods', 'Adams_Bashforth_Methods',
            'Quaternion']
 
 
@@ -100,7 +101,7 @@ class abs_comp:
         return str
 
     def printmyself(self):
-        PETSc.Sys.Print(self.myself_info())
+        spf.petscInfo(self.father.logger, self.myself_info())
         return True
 
     def savemyself(self, file_name):
@@ -198,114 +199,6 @@ class abs_construct_matrix(abs_comp):
         super().__init__(childType=abs_comp)
 
 
-def check_file_extension(filename, extension):
-    if filename[-len(extension):] != extension:
-        filename = filename + extension
-    return filename
-
-
-def tube_flatten(container):
-    for i in container:
-        if isinstance(i, (uniqueList, list, tuple)):
-            for j in tube_flatten(i):
-                yield j
-        else:
-            yield i
-
-
-def rot_vec2rot_mtx(rot_vct):
-    rot_vct = np.array(rot_vct).flatten()
-    err_msg = 'rot_vct is a numpy array contain three components. '
-    assert rot_vct.size == 3, err_msg
-
-    def S(vct):
-        rot_mtx = np.array([[0, -vct[2], vct[1]],
-                            [vct[2], 0, -vct[0]],
-                            [-vct[1], vct[0], 0]])
-        return rot_mtx
-
-    theta = np.linalg.norm(rot_vct)
-    if theta > 1e-6:
-        n = rot_vct / theta
-        Sn = S(n)
-        R = np.eye(3) + np.sin(theta) * Sn + (1 - np.cos(theta)) * np.dot(Sn, Sn)
-    else:
-        Sr = S(rot_vct)
-        theta2 = theta ** 2
-        R = np.eye(3) + (1 - theta2 / 6.) * Sr + (.5 - theta2 / 24.) * np.dot(Sr, Sr)
-    return R
-
-
-def get_rot_matrix(norm=np.array([0, 0, 1]), theta=0):
-    norm = np.array(norm).reshape((3,))
-    theta = -1 * float(theta)
-    if np.linalg.norm(norm) > 0:
-        norm = norm / np.linalg.norm(norm)
-    a = norm[0]
-    b = norm[1]
-    c = norm[2]
-    rotation = np.array([
-        [a ** 2 + (1 - a ** 2) * np.cos(theta),
-         a * b * (1 - np.cos(theta)) + c * np.sin(theta),
-         a * c * (1 - np.cos(theta)) - b * np.sin(theta)],
-        [a * b * (1 - np.cos(theta)) - c * np.sin(theta),
-         b ** 2 + (1 - b ** 2) * np.cos(theta),
-         b * c * (1 - np.cos(theta)) + a * np.sin(theta)],
-        [a * c * (1 - np.cos(theta)) + b * np.sin(theta),
-         b * c * (1 - np.cos(theta)) - a * np.sin(theta),
-         c ** 2 + (1 - c ** 2) * np.cos(theta)]])
-    return rotation
-
-
-def vector_rotation_norm(P2, norm=np.array([0, 0, 1]), theta=0, rotation_origin=np.zeros(3)):
-    rotation = get_rot_matrix(norm, theta)
-    P20 = np.dot(rotation, (P2 - rotation_origin)) + rotation_origin
-    P20 = P20 / np.linalg.norm(P20)
-    return P20
-
-
-def vector_rotation(P2, norm=np.array([0, 0, 1]), theta=0, rotation_origin=np.zeros(3)):
-    rotation = get_rot_matrix(norm, theta)
-    P20 = np.dot(rotation, (P2 - rotation_origin)) + rotation_origin
-    return P20
-
-
-def rotMatrix_DCM(x0, y0, z0, x, y, z):
-    # Diebel, James. "Representing attitude: Euler angles, unit quaternions, and rotation vectors."
-    #  Matrix 58.15-16 (2006): 1-35.
-    # eq. 17
-    # https://arxiv.org/pdf/1705.06997.pdf
-    # appendix B
-    # Graf, Basile. "Quaternions and dynamics." arXiv preprint arXiv:0811.2889 (2008).
-    #
-    # A rotation matrix may also be referred to as a direction
-    # cosine matrix, because the elements of this matrix are the
-    # cosines of the unsigned angles between the body-¯xed axes
-    # and the world axes. Denoting the world axes by (x; y; z)
-    # and the body-fixed axes by (x0; y0; z0), let \theta_{x';y} be,
-    # for example, the unsigned angle between the x'-axis and the y-axis
-    # (x0, y0, z0)^T = dot(R, (x, y, z)^T )
-
-    R = np.array(((np.dot(x0, x), np.dot(x0, y), np.dot(x0, z)),
-                  (np.dot(y0, x), np.dot(y0, y), np.dot(y0, z)),
-                  (np.dot(z0, x), np.dot(z0, y), np.dot(z0, z))))
-    return R
-
-
-def Rloc2glb(theta, phi, psi):
-    rotM = np.array(
-        ((np.cos(phi) * np.cos(psi) * np.cos(theta) - np.sin(phi) * np.sin(psi),
-          -(np.cos(psi) * np.sin(phi)) - np.cos(phi) * np.cos(theta) * np.sin(psi),
-          np.cos(phi) * np.sin(theta)),
-         (np.cos(psi) * np.cos(theta) * np.sin(phi) + np.cos(phi) * np.sin(psi),
-          np.cos(phi) * np.cos(psi) - np.cos(theta) * np.sin(phi) * np.sin(psi),
-          np.sin(phi) * np.sin(theta)),
-         (-(np.cos(psi) * np.sin(theta)),
-          np.sin(psi) * np.sin(theta),
-          np.cos(theta))))
-    return rotM
-
-
 class coordinate_transformation:
     @staticmethod
     def vector_rotation(f, R):
@@ -329,84 +222,6 @@ class fullprint:
 
     def __exit__(self, type, value, traceback):
         np.set_printoptions(**self._opt)
-
-
-def Adams_Bashforth_Methods(order, f_list, eval_dt):
-    def o1(f_list, eval_dt):
-        delta = eval_dt * f_list[-1]
-        return delta
-
-    def o2(f_list, eval_dt):
-        delta = eval_dt * (3 / 2 * f_list[-1] - 1 / 2 * f_list[-2])
-        return delta
-
-    def o3(f_list, eval_dt):
-        delta = eval_dt * (23 / 12 * f_list[-1] - 16 / 12 * f_list[-2] + 5 / 12 * f_list[-3])
-        return delta
-
-    def o4(f_list, eval_dt):
-        delta = eval_dt * (
-                55 / 24 * f_list[-1] - 59 / 24 * f_list[-2] + 37 / 24 * f_list[-3] - 9 / 24 *
-                f_list[-4])
-        return delta
-
-    def o5(f_list, eval_dt):
-        delta = eval_dt * (
-                1901 / 720 * f_list[-1] - 2774 / 720 * f_list[-2] + 2616 / 720 * f_list[-3]
-                - 1274 / 720 * f_list[-4] + 251 / 720 * f_list[-5])
-        return delta
-
-    def get_order(order):
-        return dict([(1, o1),
-                     (2, o2),
-                     (3, o3),
-                     (4, o4),
-                     (5, o5),
-                     ]).get(order, o1)
-
-    return get_order(order)(f_list, eval_dt)
-
-
-def Adams_Moulton_Methods(order, f_list, eval_dt):
-    def o1(f_list, eval_dt):
-        delta = eval_dt * f_list[-1]
-        return delta
-
-    def o2(f_list, eval_dt):
-        delta = eval_dt * (1 / 2 * f_list[-1] + 1 / 2 * f_list[-2])
-        return delta
-
-    def o3(f_list, eval_dt):
-        delta = eval_dt * (5 / 12 * f_list[-1] + 8 / 12 * f_list[-2] - 1 / 12 * f_list[-3])
-        return delta
-
-    def o4(f_list, eval_dt):
-        delta = eval_dt * (
-                9 / 24 * f_list[-1] + 19 / 24 * f_list[-2] - 5 / 24 * f_list[-3] + 1 / 24 *
-                f_list[-4])
-        return delta
-
-    def o5(f_list, eval_dt):
-        delta = eval_dt * (251 / 720 * f_list[-1] + 646 / 720 * f_list[-2] - 264 / 720 * f_list[-3]
-                           + 106 / 720 * f_list[-4] - 19 / 720 * f_list[-5])
-        return delta
-
-    def get_order(order):
-        return dict([(1, o1),
-                     (2, o2),
-                     (3, o3),
-                     (4, o4),
-                     (5, o5),
-                     ]).get(order, o1)
-
-    return get_order(order)(f_list, eval_dt)
-
-
-def mpiprint(*args, **kwargs):
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    if comm.rank == 0:
-        print(*args, **kwargs)
 
 
 class Quaternion:
@@ -557,3 +372,314 @@ class Quaternion:
 
     def get_rotM(self):
         return Rloc2glb(*self.get_thphps())
+
+
+class MinorSymLogLocator(Locator):
+    """
+    Dynamically find minor tick positions based on the positions of
+    major ticks for a symlog scaling.
+    """
+
+    def __init__(self, linthresh):
+        """
+        Ticks will be placed between the major ticks.
+        The placement is linear for x between -linthresh and linthresh,
+        otherwise its logarithmically
+        """
+        self.linthresh = linthresh
+
+    def __call__(self):
+        'Return the locations of the ticks'
+        majorlocs = self.axis.get_majorticklocs()
+        view_interval = self.axis.get_view_interval()
+        if view_interval[-1] > majorlocs[-1]:
+            majorlocs = np.hstack((majorlocs, view_interval[-1]))
+        assert np.all(majorlocs >= 0)
+        if np.isclose(majorlocs[0], 0):
+            majorlocs = majorlocs[1:]
+
+        # # iterate through minor locs, handle the lowest part, old version
+        # minorlocs = []
+        # for i in range(1, len(majorlocs)):
+        #     majorstep = majorlocs[i] - majorlocs[i - 1]
+        #     if abs(majorlocs[i - 1] + majorstep / 2) < self.linthresh:
+        #         ndivs = 10
+        #     else:
+        #         ndivs = 9
+        #     minorstep = majorstep / ndivs
+        #     locs = np.arange(majorlocs[i - 1], majorlocs[i], minorstep)[1:]
+        #     minorlocs.extend(locs)
+
+        # iterate through minor locs, handle the lowest part, my version
+        minorlocs = []
+        for i in range(1, len(majorlocs)):
+            tloc = majorlocs[i - 1]
+            tgap = majorlocs[i] - majorlocs[i - 1]
+            tstp = majorlocs[i - 1] * self.linthresh * 10
+            while tloc < tgap and not np.isclose(tloc, tgap):
+                tloc = tloc + tstp
+                minorlocs.append(tloc)
+        return self.raise_if_exceeds(np.array(minorlocs))
+
+    def tick_values(self, vmin, vmax):
+        raise NotImplementedError('Cannot get tick locations for a '
+                                  '%s type.' % type(self))
+
+
+class midPowerNorm(Normalize):
+    # user define color norm
+    def __init__(self, gamma=10, midpoint=1, vmin=None, vmax=None, clip=False):
+        Normalize.__init__(self, vmin, vmax, clip)
+        assert gamma > 1
+        self.gamma = gamma
+        self.midpoint = midpoint
+
+    def __call__(self, value, clip=None):
+        if clip is None:
+            clip = self.clip
+
+        result, is_scalar = self.process_value(value)
+
+        self.autoscale_None(result)
+        gamma = self.gamma
+        midpoint = self.midpoint
+        logmid = np.log(midpoint) / np.log(gamma)
+        vmin, vmax = self.vmin, self.vmax
+        if vmin > vmax:
+            raise ValueError("minvalue must be less than or equal to maxvalue")
+        elif vmin == vmax:
+            result.fill(0)
+        else:
+            if clip:
+                mask = np.ma.getmask(result)
+                result = np.ma.array(np.clip(result.filled(vmax), vmin, vmax),
+                                     mask=mask)
+            resdat = result.data
+            tidx1 = resdat < midpoint
+            tidx2 = np.logical_not(tidx1)
+            resdat1 = np.log(resdat[tidx1]) / np.log(gamma)
+            v1 = np.log(vmin) / np.log(gamma)
+            tx, ty = [v1, logmid], [0, 0.5]
+            #             print(resdat1, tx, ty)
+            tuse1 = np.interp(resdat1, tx, ty)
+            resdat2 = np.log(resdat[tidx2]) / np.log(gamma)
+            v2 = np.log(vmax) / np.log(gamma)
+            tx, ty = [logmid, v2], [0.5, 1]
+            tuse2 = np.interp(resdat2, tx, ty)
+            resdat[tidx1] = tuse1
+            resdat[tidx2] = tuse2
+            result = np.ma.array(resdat, mask=result.mask, copy=False)
+        return result
+
+
+# class zeroPowerNorm(Normalize):
+#     def __init__(self, gamma=10, linthresh=1, linscale=1, vmin=None, vmax=None, clip=False):
+#         Normalize.__init__(self, vmin, vmax, clip)
+#         assert gamma > 1
+#         self.gamma = gamma
+#         self.midpoint = 0
+#         assert vmin < 0
+#         assert vmax > 0
+#         self.linthresh = linthresh
+#         self.linscale = linscale
+#
+#     def __call__(self, value, clip=None):
+#         if clip is None:
+#             clip = self.clip
+#         result, is_scalar = self.process_value(value)
+#
+#         self.autoscale_None(result)
+#         gamma = self.gamma
+#         midpoint = self.midpoint
+#         linthresh = self.linthresh
+#         linscale = self.linscale
+#         vmin, vmax = self.vmin, self.vmax
+#
+#         if clip:
+#             mask = np.ma.getmask(result)
+#             result = np.ma.array(np.clip(result.filled(vmax), vmin, vmax),
+#                                  mask=mask)
+#         assert result.max() > 0
+#         assert result.min() < 0
+#
+#         mag0 = np.log(result.max()) / np.log(linthresh)
+#         mag2 = np.log(-result.min()) / np.log(linthresh)
+#         mag1 = linscale / (linscale + mag0 + mag2)
+#         b0 = mag0 / (mag0 + mag1 + mag2)
+#         b1 = (mag0 + mag1) / (mag0 + mag1 + mag2)
+#
+#         resdat = result.data
+#         tidx0 = (resdat > -np.inf) * (resdat <= -linthresh)
+#         tidx1 = (resdat > -linthresh) * (resdat <= linthresh)
+#         tidx2 = (resdat > linthresh) * (resdat <= np.inf)
+#         resdat0 = np.log(-resdat[tidx0]) / np.log(gamma)
+#         resdat1 = resdat[tidx1]
+#         resdat2 = np.log(resdat[tidx2]) / np.log(gamma)
+#         #
+#         tx, ty = [np.log(-vmin) / np.log(gamma), np.log(linthresh) / np.log(gamma)], [0, b0]
+#         tuse0 = np.interp(resdat0, tx, ty)
+#         #
+#         tx, ty = [-linthresh, linthresh], [b0, b1]
+#         tuse1 = np.interp(resdat1, tx, ty)
+#
+#         tx, ty = [v1, logmid], [0, 0.5]
+#         #             print(resdat1, tx, ty)
+#         tuse1 = np.interp(resdat1, tx, ty)
+#         resdat2 = np.log(resdat[tidx2]) / np.log(gamma)
+#         v2 = np.log(vmax) / np.log(gamma)
+#         tx, ty = [logmid, v2], [0.5, 1]
+#         tuse2 = np.interp(resdat2, tx, ty)
+#         resdat[tidx1] = tuse1
+#         resdat[tidx2] = tuse2
+#         result = np.ma.array(resdat, mask=result.mask, copy=False)
+#         return result
+
+
+# user define color norm
+class midLinearNorm(Normalize):
+    def __init__(self, midpoint=1, vmin=None, vmax=None, clip=False):
+        # clip: see np.clip, Clip (limit) the values in an array.
+        # assert 1 == 2
+        Normalize.__init__(self, vmin, vmax, clip)
+        self.midpoint = midpoint
+
+    def __call__(self, value, clip=None):
+        if clip is None:
+            clip = self.clip
+        result, is_scalar = self.process_value(value)
+        # print(type(result))
+
+        self.autoscale_None(result)
+        midpoint = self.midpoint
+        vmin, vmax = self.vmin, self.vmax
+        if vmin > vmax:
+            raise ValueError("minvalue must be less than or equal to maxvalue")
+        elif vmin == vmax:
+            result.fill(0)
+        else:
+            if clip:
+                mask = np.ma.getmask(result)
+                result = np.ma.array(np.clip(result.filled(vmax), vmin, vmax), mask=mask)
+            resdat = result.data
+            tidx1 = resdat < midpoint
+            tidx2 = np.logical_not(tidx1)
+            resdat1 = resdat[tidx1]
+            if vmin < midpoint:
+                tx, ty = [vmin, midpoint], [0, 0.5]
+                tuse1 = np.interp(resdat1, tx, ty)
+            else:
+                tuse1 = np.zeros_like(resdat1)
+            resdat2 = resdat[tidx2]
+            if vmax > midpoint:
+                tx, ty = [midpoint, vmax], [0.5, 1]
+                tuse2 = np.interp(resdat2, tx, ty)
+            else:
+                tuse2 = np.zeros_like(resdat2)
+            resdat[tidx1] = tuse1
+            resdat[tidx2] = tuse2
+            result = np.ma.array(resdat, mask=result.mask, copy=False)
+        return result
+
+
+class TwoSlopeNorm(Normalize):
+    # noinspection PyMissingConstructor
+    def __init__(self, vcenter, vmin=None, vmax=None):
+        """
+        Normalize data with a set center.
+
+        Useful when mapping data with an unequal rates of change around a
+        conceptual center, e.g., data that range from -2 to 4, with 0 as
+        the midpoint.
+
+        Parameters
+        ----------
+        vcenter : float
+            The data value that defines ``0.5`` in the normalization.
+        vmin : float, optional
+            The data value that defines ``0.0`` in the normalization.
+            Defaults to the min value of the dataset.
+        vmax : float, optional
+            The data value that defines ``1.0`` in the normalization.
+            Defaults to the the max value of the dataset.
+
+        Examples
+        --------
+        This maps data value -4000 to 0., 0 to 0.5, and +10000 to 1.0; data
+        between is linearly interpolated::
+
+            >>> import matplotlib.colors as mcolors
+            >>> offset = mcolors.TwoSlopeNorm(vmin=-4000.,
+                                              vcenter=0., vmax=10000)
+            >>> data = [-4000., -2000., 0., 2500., 5000., 7500., 10000.]
+            >>> offset(data)
+            array([0., 0.25, 0.5, 0.625, 0.75, 0.875, 1.0])
+        """
+
+        self.vcenter = vcenter
+        self.vmin = vmin
+        self.vmax = vmax
+        if vcenter is not None and vmax is not None and vcenter >= vmax:
+            raise ValueError('vmin, vcenter, and vmax must be in '
+                             'ascending order')
+        if vcenter is not None and vmin is not None and vcenter <= vmin:
+            raise ValueError('vmin, vcenter, and vmax must be in '
+                             'ascending order')
+
+    def autoscale_None(self, A):
+        """
+        Get vmin and vmax, and then clip at vcenter
+        """
+        super().autoscale_None(A)
+        if self.vmin > self.vcenter:
+            self.vmin = self.vcenter
+        if self.vmax < self.vcenter:
+            self.vmax = self.vcenter
+
+    def __call__(self, value, clip=None):
+        """
+        Map value to the interval [0, 1]. The clip argument is unused.
+        """
+        result, is_scalar = self.process_value(value)
+        self.autoscale_None(result)  # sets self.vmin, self.vmax if None
+
+        if not self.vmin <= self.vcenter <= self.vmax:
+            raise ValueError("vmin, vcenter, vmax must increase monotonically")
+        result = np.ma.masked_array(
+            np.interp(result, [self.vmin, self.vcenter, self.vmax],
+                      [0, 0.5, 1.]), mask=np.ma.getmask(result))
+        if is_scalar:
+            result = np.atleast_1d(result)[0]
+        return result
+
+
+class Arrow3D(FancyArrowPatch):
+    def __init__(self, x, y, z, dx, dy, dz, *args, **kwargs):
+        super().__init__((0, 0), (0, 0), *args, **kwargs)
+        self._xyz = (x, y, z)
+        self._dxdydz = (dx, dy, dz)
+
+    def draw(self, renderer):
+        x1, y1, z1 = self._xyz
+        dx, dy, dz = self._dxdydz
+        x2, y2, z2 = (x1 + dx, y1 + dy, z1 + dz)
+        xs, ys, zs = proj_transform((x1, x2), (y1, y2), (z1, z2), renderer.M)
+        self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
+        super().draw(renderer)
+
+
+def _arrow3D(ax, x, y, z, dx, dy, dz, *args, **kwargs):
+    '''Add an 3d arrow to an `Axes3D` instance.'''
+    arrow = Arrow3D(x, y, z, dx, dy, dz, *args, **kwargs)
+    ax.add_artist(arrow)
+
+
+setattr(Axes3D, 'arrow3D', _arrow3D)
+
+
+def tube_flatten(container):
+    for i in container:
+        if isinstance(i, (uniqueList, list, tuple)):
+            for j in tube_flatten(i):
+                yield j
+        else:
+            yield i

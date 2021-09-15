@@ -28,6 +28,7 @@ from act_src import problemClass
 from act_src import relationClass
 from act_src import particleClass
 from act_src import interactionClass
+from act_codeStore import support_fun as spf
 
 
 # from act_codeStore import support_fun as spf
@@ -36,9 +37,6 @@ from act_src import interactionClass
 class _base_doCalculate(baseClass.baseObj):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        PETSc.Sys.Print()
-        PETSc.Sys.Print('Collective motion solve, Zhang Ji, 2021. ')
-        PETSc.Sys.Print('Generate Problem. ')
 
     @abc.abstractmethod
     def ini_kwargs(self, **kwargs):
@@ -57,18 +55,20 @@ class _base_do2D(_base_doCalculate):
                  ptcHandle=particleClass.particle2D,
                  **kwargs):
         super().__init__(**kwargs)
+        self._problem = prbHandle(name=fileHandle)
+        spf.petscInfo(self.problem.logger, '#' * 72)
+        spf.petscInfo(self.problem.logger, 'Generate Problem. ')
 
         err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
         assert nptc > 4, err_msg
         un = self._test_para(un, 'speed', nptc, 'wrong parameter un. ')
         ln = self._test_para(ln, 'length', nptc, 'wrong parameter ln. ')
 
-        prb1 = prbHandle(name=fileHandle)
-        self._set_problem_property(prb1, **kwargs)
+        self._set_problem_property(**kwargs)
 
         rlt1 = rltHandle(name='Relation2D')
         rlt1.overlap_epsilon = overlap_epsilon
-        prb1.relationHandle = rlt1
+        self.problem.relationHandle = rlt1
 
         np.random.seed(seed)
         for tun, tln in zip(un, ln):
@@ -76,68 +76,66 @@ class _base_do2D(_base_doCalculate):
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
             tptc.X = np.random.uniform(-Xlim, Xlim, (2,))
             tptc.u = tun
-            prb1.add_obj(tptc)
-        self._problem = prb1
+            self.problem.add_obj(tptc)
 
     @property
     def problem(self):
         return self._problem
 
-    def _set_problem_property(self, prb1, **kwargs):
-        prb1.update_fun = kwargs['update_fun']
-        prb1.update_order = kwargs['update_order']
-        prb1.save_every = kwargs['save_every']
-        prb1.tqdm_fun = kwargs['tqdm_fun']
+    def _set_problem_property(self, **kwargs):
+        self.problem.update_fun = kwargs['update_fun']
+        self.problem.update_order = kwargs['update_order']
+        self.problem.save_every = kwargs['save_every']
+        self.problem.tqdm_fun = kwargs['tqdm_fun']
         return True
 
     def _test_para(self, para, para_name, nptc, err_msg):
         if np.alltrue(np.isfinite(para)):
             para = np.array(para)
             if para.size == 1:
-                PETSc.Sys.Print('  All the particles have a unified %s=%f, ' % (para_name, para))
+                spf.petscInfo(self.problem.logger, '  All the particles have a unified %s=%f, ' % (para_name, para))
                 para = np.ones(nptc) * para
             else:
                 assert para.size == nptc, err_msg
-                PETSc.Sys.Print('  The %s of each particle is given. ' % para_name, )
+                spf.petscInfo(self.problem.logger, '  The %s of each particle is given. ' % para_name, )
         elif para == 'random':
             para = np.random.sample(nptc)
-            PETSc.Sys.Print('  The %s of each particle following an uniform distribution. ' % para_name, )
+            spf.petscInfo(self.problem.logger,
+                          '  The %s of each particle following an uniform distribution. ' % para_name, )
         else:
             raise Exception(err_msg)
         return para
 
     @abc.abstractmethod
-    def addInteraction(self, prb1):
+    def addInteraction(self):
         return
 
     def do_calculate(self, max_t, ini_t=0, eval_dt=0.1, ):
         err_msg = 'wrong parameter eval_dt, eval_dt>0. '
         assert eval_dt > 0, err_msg
 
-        prb1 = self.problem
-        self.addInteraction(prb1)
-        # prb1.update_prepare()
-        prb1.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
-        return prb1
+        self.addInteraction()
+        self.problem.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
+        return self.problem
 
 
 class do_FiniteDipole2D(_base_do2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
-    def addInteraction(self, prb1):
+    def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
-        prb1.add_act(act1)
+        self.problem.add_act(act1)
         act2 = interactionClass.FiniteDipole2D(name='FiniteDipole2D')
-        prb1.add_act(act2)
+        self.problem.add_act(act2)
         return True
 
 
 class do_LimFiniteDipole2D(do_FiniteDipole2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
-    def addInteraction(self, prb1):
+    def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
-        prb1.add_act(act1)
+        self.problem.add_act(act1)
         act2 = interactionClass.limFiniteDipole2D(name='FiniteDipole2D')
-        prb1.add_act(act2)
+        self.problem.add_act(act2)
         return True
 
 
@@ -153,19 +151,19 @@ class do_behaviorParticle2D(_base_do2D):
 
         super().__init__(**kwargs)
 
-    def addInteraction(self, prb1):
+    def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
-        prb1.add_act(act1)
+        self.problem.add_act(act1)
         act3 = interactionClass.Attract2D(name='Attract2D')
-        prb1.add_act(act3)
+        self.problem.add_act(act3)
         act4 = interactionClass.Align2D(name='Align2D')
-        prb1.add_act(act4)
+        self.problem.add_act(act4)
         return True
 
-    def _set_problem_property(self, prb1: 'problemClass.behavior2DProblem', **kwargs):
-        super()._set_problem_property(prb1, **kwargs)
-        prb1.align = kwargs['align']
-        prb1.attract = kwargs['attract']
+    def _set_problem_property(self, **kwargs):
+        super()._set_problem_property(**kwargs)
+        self.problem.align = kwargs['align']
+        self.problem.attract = kwargs['attract']
         return True
 
 
@@ -173,25 +171,25 @@ class do_behaviorWienerParticle2D(do_behaviorParticle2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun',
     #                     'align', 'attract',
     #                     'rot_noise', 'trs_noise']
-    def addInteraction(self, prb1):
-        super().addInteraction(prb1)
+    def addInteraction(self):
+        super().addInteraction()
         act5 = interactionClass.Wiener2D(name='Wiener2D')
-        prb1.add_act(act5)
+        self.problem.add_act(act5)
         return True
 
-    def _set_problem_property(self, prb1: 'problemClass.behavior2DProblem', **kwargs):
-        super()._set_problem_property(prb1, **kwargs)
-        prb1.rot_noise = kwargs['rot_noise']
-        prb1.trs_noise = kwargs['trs_noise']
+    def _set_problem_property(self,  **kwargs):
+        super()._set_problem_property( **kwargs)
+        self.problem.rot_noise = kwargs['rot_noise']
+        self.problem.trs_noise = kwargs['trs_noise']
         return True
 
 
 class do_actLimFiniteDipole2D(do_LimFiniteDipole2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
-    def addInteraction(self, prb1):
-        super().addInteraction(prb1)
+    def addInteraction(self, ):
+        super().addInteraction()
         act3 = interactionClass.Attract2D(name='Attract2D')
-        prb1.add_act(act3)
+        self.problem.add_act(act3)
         act4 = interactionClass.Align2D(name='Align2D')
-        prb1.add_act(act4)
+        self.problem.add_act(act4)
         return True
