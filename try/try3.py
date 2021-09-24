@@ -40,12 +40,12 @@ act4 = interactionClass.Align2D(name='Align2D')
 prb1.add_act(act4)
 
 prb1.update_step()
-# prb1.relationHandle.dbg_showVoronoi()
+# problem.relationHandle.dbg_showVoronoi()
 prb1.update_self(t1=tmax)
 #
 # from act_codeStore import support_fun_animation as spanm
 # from IPython import display
-# anim = spanm.make2D_X_video(prb1.t_hist, prb1.obj_list)
+# anim = spanm.make2D_X_video(problem.t_hist, problem.obj_list)
 # video = anim.to_html5_video()
 # html = display.HTML(video)
 # display.display(html)

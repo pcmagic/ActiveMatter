@@ -16,6 +16,7 @@ from act_src import relationClass
 from act_codeStore.support_class import *
 from act_codeStore import support_fun as spf
 
+
 # from act_codeStore.support_class import *
 
 
@@ -79,15 +80,15 @@ class _baseAction(baseClass.baseObj):
     def update_action(self, **kwargs):
         return 0, 0
 
-    # def update_action(self):
-    #     Uall, Wall = [], []
-    #     for obji in self.obj_list:
-    #         u, w = self.update_each_action(obji)
-    #         Uall.append(u)
-    #         Wall.append(w)
-    #     Uall = np.hstack(Uall)
-    #     Wall = np.hstack(Wall)
-    #     return Uall, Wall
+    def update_action_numpy(self):
+        Uall, Wall = [], []
+        for obji in self.obj_list:
+            u, w = self.update_each_action(obji)
+            Uall.append(u)
+            Wall.append(w)
+        Uall = np.hstack(Uall)
+        Wall = np.hstack(Wall)
+        return Uall, Wall
 
     def destroy_self(self):
         if self.dmda is not None:
@@ -273,6 +274,32 @@ class Align2D(_baseAction2D):
         return np.zeros(2), Wi
 
 
+class AlignAtrtract2D(_baseAction2D):
+    def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
+        prb = self.father  # type: problemClass.behavior2DProblem
+        obji_idx = obji.index
+        relationHandle = prb.relationHandle  # type: relationClass.VoronoiBaseRelation2D
+        # relationHandle.dbg_showVoronoi()
+        theta_ij = relationHandle.theta_ij
+        rho_ij = relationHandle.rho_ij
+
+        Wi1 = 0
+        Wi2 = 0
+        for objj in obji.neighbor_list:  # type: particleClass.particle2D
+            objj_idx = objj.index
+            tth = theta_ij[obji_idx, objj_idx]
+            tphi_ij = objj.phi - obji.phi
+            trho = rho_ij[obji_idx, objj_idx]
+            t2 = 1 + np.cos(tth)
+            Wi1 += obji.align * obji.u * np.sin(tphi_ij) * t2 +\
+                   obji.attract * trho * np.sin(tth) * t2
+            Wi2 += t2
+            # print()
+            # print(obji_idx, objj_idx, tphi_ij, obji.align * obji.u * np.sin(tphi_ij) * t2, t2)
+        Wi = Wi1 / Wi2
+        return np.zeros(2), Wi
+
+
 class Wiener2D(_baseAction2D):
     def __init__(self, **kwargs):
         super(Wiener2D, self).__init__(**kwargs)
@@ -295,7 +322,6 @@ class Wiener2D(_baseAction2D):
 
     def update_each_action(self, obji: "particleClass._baseParticle", **kwargs):
         return np.zeros(2), obji.rot_noise * np.random.normal() / self.sqrt_dt
-
 
     def print_info(self):
         baseClass.baseObj.print_info(self)

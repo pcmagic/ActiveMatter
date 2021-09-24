@@ -1,0 +1,30 @@
+ 
+Collective motion solve, Zhang Ji, 2021. 
+########################################################################
+Generate Problem. 
+  All the particles have a unified speed=1.000000, 
+  All the particles have a unified length=-1.000000, 
+ 
+Information about try_dbgBokaiZhang (behavior2DProblem): 
+  This is a 2 dimensional problem, contain 50 objects. 
+  update function: 1fe, update order: (0, 0), max loop: 1000000000
+  t0=0.000000, t1=10.000000, dt=0.010000
+  save log file to try_dbgBokaiZhang/log.try_dbgBokaiZhang 
+  save pickle file to try_dbgBokaiZhang/pickle.try_dbgBokaiZhang 
+  rotational noise: 0.000000, translational noise: 0.000000
+  align: 1.000000, attract: 1.000000
+ 
+Information about selfPropelled2D (selfPropelled2D): 
+  None
+ 
+Information about Attract2D (Attract2D): 
+  None
+ 
+Information about Align2D (Align2D): 
+  None
+ 
+Information about Relation2D (VoronoiBaseRelation2D): 
+  overlap_epsilon=0.000000
+ 
+Solve, start time: 2021-09-18 11:03:48
+Solve, finish time: 2021-09-18 11:03:55

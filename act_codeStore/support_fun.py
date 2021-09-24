@@ -386,7 +386,14 @@ def write_pbs_head_newturb(fpbs, job_name, nodes=1):
     return True
 
 
-def write_pbs_head_haiguang(fpbs, **kwargs):
+def write_pbs_head_haiguang(fpbs, job_name, nodes=1):
+    fpbs.write('#!/bin/sh\n')
+    fpbs.write('# run the job in the main node directly. ')
+    fpbs.write('\n')
+    return True
+
+
+def write_pbs_head_JiUbuntu(fpbs, job_name, nodes=1):
     fpbs.write('#!/bin/sh\n')
     fpbs.write('# run the job in the main node directly. ')
     fpbs.write('\n')
@@ -490,6 +497,11 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
         _parallel_pbs_use = _parallel_pbs_newturb
         run_fun = 'cd $bash_dir \nnohup bash %s &\ncd $t_dir\n\n'
         assert np.isclose(use_node, 1)
+    elif write_pbs_head000 is write_pbs_head_JiUbuntu:
+        main_hostname = 'JiUbuntu'
+        _parallel_pbs_use = _parallel_pbs_newturb
+        run_fun = 'cd $bash_dir \nnohup bash %s &\ncd $t_dir\n\n'
+        assert np.isclose(use_node, 1)
     else:
         raise ValueError('wrong write_pbs_head000')
     # generate .pbs file and .csh file
@@ -557,214 +569,63 @@ def write_myscript(job_name_list, job_dir):
     return True
 
 
-def set_axes_equal(ax, rad_fct=0.5):
-    figsize = ax.figure.get_size_inches()
-    l1, l2 = ax.get_position().bounds[2:] * figsize
-    lmax = np.max((l1, l2))
+def write_main_run_local(comm_list, njob_node, job_dir, random_order=False, ):
+    PWD = os.getcwd()
+    comm_list = np.array(comm_list)
+    n_comm = comm_list.size
+    pbs_name = 'main_run.pbs'
+    csh_name = 'csh.main_run'
 
-    if ax.name == "3d":
-        '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
-        cubes as cubes, etc..  This is one possible solution to Matplotlib's
-        ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
-
-        Input
-          ax: a matplotlib axis, e.g., as output from plt.gca().
-        '''
-
-        limits = np.array([
-            ax.get_xlim3d(),
-            ax.get_ylim3d(),
-            ax.get_zlim3d(),
-        ])
-
-        origin = np.mean(limits, axis=1)
-        radius = rad_fct * np.max(np.abs(limits[:, 1] - limits[:, 0]))
-        radius_x = l1 / lmax * radius
-        radius_y = l1 / lmax * radius
-        radius_z = l2 / lmax * radius
-        ax.set_xlim3d([origin[0] - radius_x, origin[0] + radius_x])
-        ax.set_ylim3d([origin[1] - radius_y, origin[1] + radius_y])
-        ax.set_zlim3d([origin[2] - radius_z, origin[2] + radius_z])
+    t_path = os.path.join(PWD, job_dir)
+    if not os.path.exists(t_path):
+        os.makedirs(t_path)
+        print('make folder %s' % t_path)
     else:
-        limits = np.array([
-            ax.get_xlim(),
-            ax.get_ylim(),
-        ])
+        print('exist folder %s' % t_path)
 
-        origin = np.mean(limits, axis=1)
-        radius = rad_fct * np.max(np.abs(limits[:, 1] - limits[:, 0]))
-        radius_x = l1 / lmax * radius
-        radius_y = l2 / lmax * radius
-        ax.set_xlim([origin[0] - radius_x, origin[0] + radius_x])
-        ax.set_ylim([origin[1] - radius_y, origin[1] + radius_y])
-    return ax
+    if random_order:
+        tidx = np.arange(n_comm)
+        np.random.shuffle(tidx)
+        comm_list = comm_list[tidx]
 
+    # generate comm_list.sh
+    t_name0 = os.path.join(t_path, 'comm_list.sh')
+    with open(t_name0, 'w') as fcomm:
+        for i0, ts in enumerate(comm_list):
+            fcomm.write('%s \n' % ts)
+            fcomm.write('echo \'%d / %d start.\'  \n\n' % (i0 + 1, n_comm))
 
-# Topics: line, color, LineCollection, cmap, colorline, codex
-'''
-Defines a function colorline that draws a (multi-)colored 2D line with coordinates x and y.
-The color is taken from optional data in z, and creates a LineCollection.
+    # generate .pbs file
+    t_name = os.path.join(t_path, pbs_name)
+    with open(t_name, 'w') as fpbs:
+        fpbs.write('#!/bin/sh\n')
+        fpbs.write('# run the job locally. ')
+        fpbs.write('\n')
+        t2 = 'seq 0 %d | parallel -j %d -u ' % (n_comm - 1, njob_node)
+        t2 = t2 + ' --sshdelay 0.1 '
+        t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n\n ' % csh_name
+        fpbs.write(t2)
 
-z can be:
-- empty, in which case a default coloring will be used based on the position along the input arrays
-- a single number, for a uniform color [this can also be accomplished with the usual plt.plot]
-- an array of the length of at least the same length as x, to color according to this data
-- an array of a smaller length, in which case the colors are repeated along the curve
-
-The function colorline returns the LineCollection created, which can be modified afterwards.
-
-See also: plt.streamplot
-'''
-
-
-# Data manipulation:
-def make_segments(x, y):
-    '''
-    Create list of line segments from x and y coordinates, in the correct format for LineCollection:
-    an array of the form   numlines x (points per line) x 2 (x and y) array
-    '''
-
-    points = np.array([x, y]).T.reshape(-1, 1, 2)
-    segments = np.concatenate([points[:-1], points[1:]], axis=1)
-
-    return segments
-
-
-# Interface to LineCollection:
-def colorline(x, y, z=None, cmap=plt.get_cmap('copper'), ax=None, norm=plt.Normalize(0.0, 1.0),
-              label=' ', linewidth=3, alpha=1.0):
-    '''
-    Plot a colored line with coordinates x and y
-    Optionally specify colors in the array z
-    Optionally specify a colormap, a norm function and a line width
-    '''
-
-    # Default colors equally spaced on [0,1]:
-    if z is None:
-        z = np.linspace(0.0, 1.0, x.size)
-    # Special case if a single number:
-    if not hasattr(z, "__iter__"):  # to check for numerical input -- this is a hack
-        z = np.array([z])
-    z = np.asarray(z)
-
-    if ax is None:
-        fig, ax = plt.subplots(nrows=1, ncols=1)
-        fig.patch.set_facecolor('white')
-    else:
-        plt.sca(ax)
-        # fig = plt.gcf()
-
-    segments = make_segments(x, y)
-    lc = LineCollection(segments, array=z, cmap=cmap, norm=norm, linewidth=linewidth, alpha=alpha)
-    ax.add_collection(lc)
-    return lc
-
-
-def colorline3d(tnodes, tcl, quiver_length_fct=None, clb_title=' ', show_project=False, tu=None,
-                nu_show=50, return_fig=False, ax0=None, tcl_lim=None, tcl_fontsize=10,
-                cmap=plt.get_cmap('jet')):
-    if ax0 is None:
-        fig = plt.figure(figsize=(8, 8), dpi=100)
-        fig.patch.set_facecolor('white')
-        ax0 = fig.add_subplot(1, 1, 1, projection='3d')
-    else:
-        assert hasattr(ax0, 'get_zlim')
-        plt.sca(ax0)
-        fig = plt.gcf()
-    if tcl_lim is None:
-        tcl_lim = (tcl.min(), tcl.max())
-    ax0.plot(tnodes[:, 0], tnodes[:, 1], tnodes[:, 2]).pop(0).remove()
-    cax1 = inset_axes(ax0, width="80%", height="5%", bbox_to_anchor=(0.1, 0.1, 0.8, 1),
-                      loc=9, bbox_transform=ax0.transAxes, borderpad=0, )
-    norm = plt.Normalize(*tcl_lim)
-    cmap = cmap
-    # Create the 3D-line collection object
-    points = tnodes.reshape(-1, 1, 3)
-    segments = np.concatenate([points[:-1], points[1:]], axis=1)
-    lc = Line3DCollection(segments, cmap=cmap, norm=norm)
-    lc.set_array(tcl)
-    ax0.add_collection3d(lc, zs=points[:, :, 2].flatten(), zdir='z')
-    clb = fig.colorbar(lc, cax=cax1, orientation="horizontal")
-    clb.ax.tick_params(labelsize=tcl_fontsize)
-    clb.ax.set_title(clb_title)
-    clb_ticks = np.linspace(*tcl_lim, 5)
-    clb.set_ticks(clb_ticks)
-    clb.ax.set_yticklabels(clb_ticks)
-    set_axes_equal(ax0)
-    if show_project:
-        ax0.plot(np.ones_like(tnodes[:, 0]) * ax0.get_xlim()[0], tnodes[:, 1], tnodes[:, 2], '--k',
-                 alpha=0.2)
-        ax0.plot(tnodes[:, 0], np.ones_like(tnodes[:, 1]) * ax0.get_ylim()[1], tnodes[:, 2], '--k',
-                 alpha=0.2)
-        ax0.plot(tnodes[:, 0], tnodes[:, 1], np.ones_like(tnodes[:, 0]) * ax0.get_zlim()[0], '--k',
-                 alpha=0.2)
-    if not tu is None:
-        assert not quiver_length_fct is None
-        t_stp = np.max((1, tu.shape[0] // nu_show))
-        color_len = tnodes[::t_stp, 0].size
-        quiver_length = np.max(tnodes.max(axis=0) - tnodes.min(axis=0)) * quiver_length_fct
-        # colors = [cmap(1.0 * i / color_len) for i in range(color_len)]
-        # ax0.quiver(tnodes[::t_stp, 0], tnodes[::t_stp, 1], tnodes[::t_stp, 2],
-        #            tu[::t_stp, 0], tu[::t_stp, 1], tu[::t_stp, 2],
-        #            length=quiver_length, arrow_length_ratio=0.2, pivot='tail', normalize=False,
-        #            colors=colors)
-        ax0.quiver(tnodes[::t_stp, 0], tnodes[::t_stp, 1], tnodes[::t_stp, 2],
-                   tu[::t_stp, 0], tu[::t_stp, 1], tu[::t_stp, 2],
-                   length=quiver_length, arrow_length_ratio=0.2, pivot='tail', normalize=False,
-                   colors='k')
-    plt.sca(ax0)
-    ax0.set_xlabel('$X_1$')
-    ax0.set_ylabel('$X_2$')
-    ax0.set_zlabel('$X_3$')
-    # for spine in ax0.spines.values():
-    #     spine.set_visible(False)
-    # plt.tight_layout()
-
-    t1 = fig if return_fig else True
-    return t1
-
-
-def add_inset(ax0, rect, *args, **kwargs):
-    box = ax0.get_position()
-    xlim = ax0.get_xlim()
-    ylim = ax0.get_ylim()
-    inptx = interpolate.interp1d(xlim, (0, box.x1 - box.x0))
-    inpty = interpolate.interp1d(ylim, (0, box.y1 - box.y0))
-    left = inptx(rect[0]) + box.x0
-    bottom = inpty(rect[1]) + box.y0
-    width = inptx(rect[2] + rect[0]) - inptx(rect[0])
-    height = inpty(rect[3] + rect[1]) - inpty(rect[1])
-    new_rect = np.hstack((left, bottom, width, height))
-    return ax0.figure.add_axes(new_rect, *args, **kwargs)
-
-
-def multicolor_ylabel(ax, list_of_strings, list_of_colors, axis='x', anchorpad=0, **kw):
-    """this function creates axes labels with multiple colors
-    ax specifies the axes object where the labels should be drawn
-    list_of_strings is a list of all of the text items
-    list_if_colors is a corresponding list of colors for the strings
-    axis='x', 'y', or 'both' and specifies which label(s) should be drawn"""
-
-    # x-axis label
-    if axis == 'x' or axis == 'both':
-        boxes = [TextArea(text, textprops=dict(color=color, ha='left', va='bottom', **kw))
-                 for text, color in zip(list_of_strings, list_of_colors)]
-        xbox = HPacker(children=boxes, align="center", pad=0, sep=5)
-        anchored_xbox = AnchoredOffsetbox(loc='lower left', child=xbox, pad=anchorpad,
-                                          frameon=False, bbox_to_anchor=(0.2, -0.09),
-                                          bbox_transform=ax.transAxes, borderpad=0.)
-        ax.add_artist(anchored_xbox)
-
-    # y-axis label
-    if axis == 'y' or axis == 'both':
-        boxes = [TextArea(text, textprops=dict(color=color, ha='left', va='bottom',
-                                               rotation=90, **kw))
-                 for text, color in zip(list_of_strings[::-1], list_of_colors)]
-        ybox = VPacker(children=boxes, align="center", pad=0, sep=5)
-        anchored_ybox = AnchoredOffsetbox(loc='lower left', child=ybox, pad=anchorpad,
-                                          frameon=False, bbox_to_anchor=(-0.105, 0.25),
-                                          bbox_transform=ax.transAxes, borderpad=0.)
-        ax.add_artist(anchored_ybox)
+    # generate .csh file for submit
+    t_name = os.path.join(t_path, csh_name)
+    with open(t_name, 'w') as fcsh:
+        fcsh.write('#!/bin/csh -fe \n\n')
+        t2 = 'comm_list=('
+        for t3 in comm_list:
+            t2 = t2 + '"%s" ' % t3
+        t2 = t2 + ') \n\n'
+        fcsh.write(t2)
+        fcsh.write('echo ${comm_list[$1]} \n')
+        fcsh.write('echo $(expr $1 + 1) / %d start.  \n' % n_comm)
+        fcsh.write('echo \n')
+        fcsh.write('if [ ${2:-false} = true ]; then \n')
+        fcsh.write('    ${comm_list[$1]} \n')
+        fcsh.write('fi \n\n')
+    print('Input %d cases. ' % n_comm)
+    print('Random order mode is %s. ' % random_order)
+    print('Command of first case is:')
+    print(comm_list[0])
+    return True
 
 
 def profile(filename=None, comm=MPI.COMM_WORLD):
@@ -815,5 +676,3 @@ def check_file_extension(filename, extension):
     if filename[-len(extension):] != extension:
         filename = filename + extension
     return filename
-
-

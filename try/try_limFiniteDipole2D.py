@@ -42,7 +42,7 @@ x, y, phi1, phi2 = 4, 0,    np.pi / 2, np.pi / 2   # Liebergen2015, Fig 4.1, cas
 # x, y, phi1, phi2 = -0.75,  0,    0, np.pi * 2 / 3   # Liebergen2015, Fig 4.8, case e
 # x, y, phi1, phi2 = -0.77,  0.4,  0, np.pi * 2 / 3   # Liebergen2015, Fig 4.8, case f
 
-# prb1 = problemClass.finiteDipole2DProblem(name='testFiniteDipole2D')
+# problem = problemClass.finiteDipole2DProblem(name='testFiniteDipole2D')
 prb1 = problemClass.finiteDipole2DProblem(name='testFiniteDipole2D')
 prb1.attract = attract
 prb1.align = align

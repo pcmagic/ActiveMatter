@@ -10,7 +10,10 @@ import abc
 # import matplotlib
 # import subprocess
 # import os
-#
+from ctypes import CDLL
+
+RAND_MAX = 2147483647
+
 from petsc4py import PETSc
 import numpy as np
 # import pickle
@@ -55,39 +58,70 @@ class _base_do2D(_base_doCalculate):
                  ptcHandle=particleClass.particle2D,
                  **kwargs):
         super().__init__(**kwargs)
+        err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
+        assert nptc > 4, err_msg
         self._problem = prbHandle(name=fileHandle)
         spf.petscInfo(self.problem.logger, '#' * 72)
         spf.petscInfo(self.problem.logger, 'Generate Problem. ')
 
-        err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
-        assert nptc > 4, err_msg
-        un = self._test_para(un, 'speed', nptc, 'wrong parameter un. ')
-        ln = self._test_para(ln, 'length', nptc, 'wrong parameter ln. ')
+        self._nptc = nptc
+        self._overlap_epsilon = overlap_epsilon
+        self._un = self._test_para(un, 'speed', nptc, 'wrong parameter un. ')
+        self._ln = self._test_para(ln, 'length', nptc, 'wrong parameter ln. ')
+        self._Xlim = Xlim
+        self._seed = seed
+        self._fileHandle = fileHandle
+        self._prbHandle = prbHandle
+        self._rltHandle = rltHandle
+        self._ptcHandle = ptcHandle
 
-        self._set_problem_property(**kwargs)
-
-        rlt1 = rltHandle(name='Relation2D')
-        rlt1.overlap_epsilon = overlap_epsilon
-        self.problem.relationHandle = rlt1
-
-        np.random.seed(seed)
-        for tun, tln in zip(un, ln):
-            tptc = ptcHandle(length=tln, name='ptc2D')
-            tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
-            tptc.X = np.random.uniform(-Xlim, Xlim, (2,))
-            tptc.u = tun
-            self.problem.add_obj(tptc)
+        self._set_problem(**kwargs)
+        self._set_relation()
+        self._set_particle()
 
     @property
     def problem(self):
         return self._problem
 
-    def _set_problem_property(self, **kwargs):
-        self.problem.update_fun = kwargs['update_fun']
-        self.problem.update_order = kwargs['update_order']
-        self.problem.save_every = kwargs['save_every']
-        self.problem.tqdm_fun = kwargs['tqdm_fun']
-        return True
+    @property
+    def nptc(self):
+        return self._nptc
+
+    @property
+    def overlap_epsilon(self):
+        return self._overlap_epsilon
+
+    @property
+    def un(self):
+        return self._un
+
+    @property
+    def ln(self):
+        return self._ln
+
+    @property
+    def Xlim(self):
+        return self._Xlim
+
+    @property
+    def seed(self):
+        return self._seed
+
+    @property
+    def fileHandle(self):
+        return self._fileHandle
+
+    @property
+    def prbHandle(self):
+        return self._prbHandle
+
+    @property
+    def rltHandle(self):
+        return self._rltHandle
+
+    @property
+    def ptcHandle(self):
+        return self._ptcHandle
 
     def _test_para(self, para, para_name, nptc, err_msg):
         if np.alltrue(np.isfinite(para)):
@@ -105,6 +139,28 @@ class _base_do2D(_base_doCalculate):
         else:
             raise Exception(err_msg)
         return para
+
+    def _set_problem(self, **kwargs):
+        self.problem.update_fun = kwargs['update_fun']
+        self.problem.update_order = kwargs['update_order']
+        self.problem.save_every = kwargs['save_every']
+        self.problem.tqdm_fun = kwargs['tqdm_fun']
+        return True
+
+    def _set_relation(self):
+        self.problem.relationHandle = self.rltHandle(name='Relation2D')
+        self.problem.relationHandle.overlap_epsilon = self.overlap_epsilon
+        return True
+
+    def _set_particle(self):
+        np.random.seed(self.seed)
+        for tun, tln in zip(self.un, self.ln):
+            tptc = self.ptcHandle(length=tln, name='ptc2D')
+            tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
+            tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
+            tptc.u = tun
+            self.problem.add_obj(tptc)
+        return True
 
     @abc.abstractmethod
     def addInteraction(self):
@@ -160,8 +216,8 @@ class do_behaviorParticle2D(_base_do2D):
         self.problem.add_act(act4)
         return True
 
-    def _set_problem_property(self, **kwargs):
-        super()._set_problem_property(**kwargs)
+    def _set_problem(self, **kwargs):
+        super()._set_problem(**kwargs)
         self.problem.align = kwargs['align']
         self.problem.attract = kwargs['attract']
         return True
@@ -177,10 +233,97 @@ class do_behaviorWienerParticle2D(do_behaviorParticle2D):
         self.problem.add_act(act5)
         return True
 
-    def _set_problem_property(self,  **kwargs):
-        super()._set_problem_property( **kwargs)
+    def _set_problem(self, **kwargs):
+        super()._set_problem(**kwargs)
         self.problem.rot_noise = kwargs['rot_noise']
         self.problem.trs_noise = kwargs['trs_noise']
+        return True
+
+
+class do_dbgBokaiZhang(do_behaviorParticle2D):
+    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun',
+    #                     'align', 'attract',
+    #                     'rot_noise', 'trs_noise']
+
+    # void initialize_particles() {
+    #     int i, j;
+    #     double dx, dy, dr, dr2;
+    #     double tempx, tempy, temp_ori;
+    #     srand(1);
+    #
+    #     particles = (struct particles_struct * ) calloc(N, sizeof(struct particles_struct));
+    #
+    #     for (i = 0; i < N; i++) {
+    #         particles[i].ID = i + 1;
+    #         particles[i].x = SX * rand() / (RAND_MAX + 1.0);
+    #         particles[i].y = SY * rand() / (RAND_MAX + 1.0);
+    #         particles[i].ori = 2 * PI * rand() / (RAND_MAX + 1.0);
+    #         printf("%3d, %15.10f, %15.10f, %15.10f \n",
+    #             particles[i].ID, particles[i].x, particles[i].y, particles[i].ori);
+    #     }
+    # }
+
+    def _set_particle(self):
+        libc = CDLL("libc.so.6")
+        libc.srand(self.seed)
+        for tun, tln in zip(self.un, self.ln):
+            tptc = self.ptcHandle(length=tln, name='ptc2D')
+            tptc.X = np.array((self.Xlim * libc.rand() / (RAND_MAX + 1.0),
+                               self.Xlim * libc.rand() / (RAND_MAX + 1.0)))
+            tptc.phi = np.float64(spf.warpToPi(2 * np.pi * libc.rand() / (RAND_MAX + 1.0)))
+            tptc.u = tun
+            self.problem.add_obj(tptc)
+            t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
+            # print("%3d, %15.10f, %15.10f, %15.10f" %
+            #       (tptc.index, tptc.X[0], tptc.X[1], t1))
+        return True
+
+    def dbg_Attract2D(self):
+        act3 = interactionClass.Attract2D(name='Attract2D')
+        self.problem.add_act(act3)
+
+        self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
+        self.problem.relationHandle.update_relation()
+        self.problem.relationHandle.update_neighbor()
+        self.problem.relationHandle.check_self()
+        act3.update_prepare()
+        Uall, Wall = act3.update_action_numpy()
+        for tptc, wi in zip(self.problem.obj_list, Wall):
+            t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
+            print("%3d, %15.10f, %15.10f, %15.10f, %15.10f" %
+                  (tptc.index, tptc.X[0], tptc.X[1], t1, wi))
+        return True
+
+    def dbg_Align2D(self):
+        act4 = interactionClass.Align2D(name='Align2D')
+        self.problem.add_act(act4)
+
+        self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
+        self.problem.relationHandle.update_relation()
+        self.problem.relationHandle.update_neighbor()
+        self.problem.relationHandle.check_self()
+        act4.update_prepare()
+        Uall, Wall = act4.update_action_numpy()
+        for tptc, wi in zip(self.problem.obj_list, Wall):
+            t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
+            print("%3d, %15.10f, %15.10f, %15.10f, %15.10f" %
+                  (tptc.index, tptc.X[0], tptc.X[1], t1, wi))
+        return True
+
+    def dbg_AlignAttract2D(self):
+        act5 = interactionClass.AlignAtrtract2D(name='AlignAtrtract2D')
+        self.problem.add_act(act5)
+
+        self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
+        self.problem.relationHandle.update_relation()
+        self.problem.relationHandle.update_neighbor()
+        self.problem.relationHandle.check_self()
+        act5.update_prepare()
+        _, Wall = act5.update_action_numpy()
+        for tptc, wi in zip(self.problem.obj_list, Wall):
+            t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
+            print("%3d, %15.10f, %15.10f, %15.10f, %15.10f" %
+                  (tptc.index, tptc.X[0], tptc.X[1], t1, wi))
         return True
 
 

@@ -14,6 +14,8 @@ from tqdm.notebook import tqdm as tqdm_notebook
 from petsc4py import PETSc
 from datetime import datetime
 import time
+import shutil
+import os
 
 from act_src import baseClass
 from act_src import particleClass
@@ -37,11 +39,22 @@ class _baseProblem(baseClass.baseObj):
         self._Wall = np.nan  # rotational velocity at current time
         self._Uall = np.nan  # translational velocity at current time
         self._relationHandle = relationClass._baseRelation()
-        self._pick_filename = '...'
+        self._pickle_filename = os.path.join(self.name, 'pickle.%s' % self.name)
+        self._log_filename = os.path.join(self.name, 'log.%s' % self.name)
         self._logger = logging.getLogger()
-        logging.basicConfig(handlers=[logging.FileHandler(filename='%s.log' % self.name, mode='w'),
+
+        # clear dir
+        fileHandle = self.name
+        if os.path.exists(fileHandle) and os.path.isdir(fileHandle):
+            shutil.rmtree(fileHandle)
+            print('remove folder %s' % fileHandle)
+        os.makedirs(fileHandle)
+        print('make folder %s' % fileHandle)
+
+        logging.basicConfig(handlers=[logging.FileHandler(filename=self.log_filename, mode='w'),
                                       logging.StreamHandler()],
-                            level=logging.INFO, format='%(message)s', )
+                            level=logging.INFO,
+                            format='%(message)s', )
         time.sleep(0.1)
         spf.petscInfo(self.logger, ' ')
         spf.petscInfo(self.logger, 'Collective motion solve, Zhang Ji, 2021. ')
@@ -55,9 +68,10 @@ class _baseProblem(baseClass.baseObj):
         self._update_order = (1e-6, 1e-9)  # rtol, atol
         self._t0 = 0  # simulation time in the range (t0, t1)
         self._t1 = -1  # simulation time in the range (t0, t1)
-        self._eval_dt = -1  # \delta_t, simulation
+        self._eval_dt = -1  # \delta_t, time step of simulation
+        self._save_dt = -1  # \delta_t, time step of date saving
         self._max_it = -1  # iteration loop no more than max_it
-        self._percentage = 0  # percentage of time depend solver.
+        self._percentage = 0  # percentage of time depend solver
         self._t_hist = []
         self._dt_hist = []
         self._tmp_idx = []  # temporary globe idx
@@ -123,6 +137,14 @@ class _baseProblem(baseClass.baseObj):
         self._check_relationHandle(relationHandle)
         relationHandle.father = self
         self._relationHandle = relationHandle
+
+    @property
+    def pickle_filename(self):
+        return self._pickle_filename
+
+    @property
+    def log_filename(self):
+        return self._log_filename
 
     @property
     def logger(self):
@@ -243,14 +265,19 @@ class _baseProblem(baseClass.baseObj):
 
     @property
     def polar(self) -> np.asarray:
-        polar = np.linalg.norm(np.sum(np.vstack([obji.P1 for obji in self.obj_list]), axis=0)) / self.n_obj
+        polar = np.linalg.norm(np.sum([obji.P1 for obji in self.obj_list], axis=0)) / self.n_obj
         return polar
 
     @property
     def milling_Daniel2014(self) -> np.asarray:
-        t1 = np.vstack([np.cross(obji.X, obji.P1) / np.linalg.norm(obji.X) for obji in self.obj_list])
+        t1 = [np.cross(obji.X, obji.P1) / np.linalg.norm(obji.X) for obji in self.obj_list]
         milling = np.linalg.norm(np.sum(t1, axis=0)) / self.n_obj
         return milling
+
+    @property
+    def speed(self) -> np.asarray:
+        speed = np.sum([np.linalg.norm(obji.U) for obji in self.obj_list], axis=0) / self.n_obj
+        return speed
 
     def _check_add_obj(self, obj):
         err_msg = 'wrong object type'
@@ -341,7 +368,7 @@ class _baseProblem(baseClass.baseObj):
         self.percentage = 0
         self.update_prepare()
         if rank == 0:
-            self.tqdm = tqdm_fun(total=100)
+            self.tqdm = tqdm_fun(total=100, desc='  %s' % self.name)
 
         # do simulation
         y0 = self._get_y0()
@@ -442,7 +469,6 @@ class _baseProblem(baseClass.baseObj):
         self.relationHandle.check_self()
 
         time.sleep(0.1)
-        spf.petscInfo(self.logger, ' ')
         spf.petscInfo(self.logger, 'Solve, finish time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         return True
 
@@ -463,11 +489,10 @@ class _baseProblem(baseClass.baseObj):
         self.relationHandle.destroy_self()
         return True
 
-    def pickmyself(self, filename: str):
+    def pickmyself(self, **kwargs):
         comm = PETSc.COMM_WORLD.tompi4py()
         rank = comm.Get_rank()
         self.destroy_self()
-        self._pick_filename = filename
 
         # dbg
         # print('dbg')
@@ -475,7 +500,7 @@ class _baseProblem(baseClass.baseObj):
         # self._action_list = None
         # self._relationHandle = None
         if rank == 0:
-            with open(filename, 'wb') as handle:
+            with open(self.pickle_filename, 'wb') as handle:
                 pickle.dump(self, handle, protocol=4)
         return True
 
@@ -493,6 +518,8 @@ class _baseProblem(baseClass.baseObj):
                       (self.update_fun, self.update_order, self.max_it))
         spf.petscInfo(self.logger, '  t0=%f, t1=%f, dt=%f' %
                       (self.t0, self.t1, self.eval_dt))
+        spf.petscInfo(self.logger, '  save log file to %s ' % self.log_filename)
+        spf.petscInfo(self.logger, '  save pickle file to %s ' % self.pickle_filename)
         self.print_self_info()
 
         for acti in self.action_list:  # type: interactionClass._baseAction

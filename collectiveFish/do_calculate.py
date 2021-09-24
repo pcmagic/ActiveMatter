@@ -1,4 +1,6 @@
 import sys
+
+import numpy as np
 import petsc4py
 
 # import matplotlib
@@ -11,6 +13,8 @@ petsc4py.init(sys.argv)
 from petsc4py import PETSc
 # from datetime import datetime
 from tqdm import tqdm
+import shutil
+import os
 
 from act_src import problemClass
 from act_src import relationClass
@@ -18,39 +22,44 @@ from act_src import particleClass
 # from act_src import interactionClass
 from act_codeStore.support_fun import *
 from act_codeStore import support_fun_calculate as spc
+from act_codeStore import support_fun_show as sps
+
+calculate_fun_dict = {
+    'do_FiniteDipole2D':           spc.do_FiniteDipole2D,
+    'do_LimFiniteDipole2D':        spc.do_LimFiniteDipole2D,
+    'do_behaviorParticle2D':       spc.do_behaviorParticle2D,
+    'do_behaviorWienerParticle2D': spc.do_behaviorWienerParticle2D,
+    'do_dbgBokaiZhang':            spc.do_dbgBokaiZhang,
+    'do_actLimFiniteDipole2D':     spc.do_actLimFiniteDipole2D,
+}
+prbHandle_dict = {
+    'do_FiniteDipole2D':           problemClass.finiteDipole2DProblem,
+    'do_LimFiniteDipole2D':        problemClass.limFiniteDipole2DProblem,
+    'do_behaviorParticle2D':       problemClass.behavior2DProblem,
+    'do_behaviorWienerParticle2D': problemClass.behavior2DProblem,
+    'do_dbgBokaiZhang':            problemClass.behavior2DProblem,
+    'do_actLimFiniteDipole2D':     problemClass.actLimFiniteDipole2DProblem,
+}
+rltHandle_dict = {
+    'do_FiniteDipole2D':           relationClass.finiteRelation2D,
+    'do_LimFiniteDipole2D':        relationClass.limFiniteRelation2D,
+    'do_behaviorParticle2D':       relationClass.VoronoiBaseRelation2D,
+    'do_behaviorWienerParticle2D': relationClass.VoronoiBaseRelation2D,
+    'do_dbgBokaiZhang':            relationClass.VoronoiBaseRelation2D,
+    'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
+}
+ptcHandle_dict = {
+    'do_FiniteDipole2D':           particleClass.finiteDipole2D,
+    'do_LimFiniteDipole2D':        particleClass.limFiniteDipole2D,
+    'do_behaviorParticle2D':       particleClass.particle2D,
+    'do_behaviorWienerParticle2D': particleClass.particle2D,
+    'do_dbgBokaiZhang':            particleClass.particle2D,
+    'do_actLimFiniteDipole2D':     particleClass.limFiniteDipole2D,
+}
 
 
 # get kwargs
 def get_problem_kwargs(**main_kwargs):
-    calculate_fun_dict = {
-        'do_FiniteDipole2D':           spc.do_FiniteDipole2D,
-        'do_LimFiniteDipole2D':        spc.do_LimFiniteDipole2D,
-        'do_behaviorParticle2D':       spc.do_behaviorParticle2D,
-        'do_behaviorWienerParticle2D': spc.do_behaviorWienerParticle2D,
-        'do_actLimFiniteDipole2D':     spc.do_actLimFiniteDipole2D,
-    }
-    prbHandle_dict = {
-        'do_FiniteDipole2D':           problemClass.finiteDipole2DProblem,
-        'do_LimFiniteDipole2D':        problemClass.limFiniteDipole2DProblem,
-        'do_behaviorParticle2D':       problemClass.behavior2DProblem,
-        'do_behaviorWienerParticle2D': problemClass.behavior2DProblem,
-        'do_actLimFiniteDipole2D':     problemClass.actLimFiniteDipole2DProblem,
-    }
-    rltHandle_dict = {
-        'do_FiniteDipole2D':           relationClass.finiteRelation2D,
-        'do_LimFiniteDipole2D':        relationClass.limFiniteRelation2D,
-        'do_behaviorParticle2D':       relationClass.VoronoiBaseRelation2D,
-        'do_behaviorWienerParticle2D': relationClass.VoronoiBaseRelation2D,
-        'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
-    }
-    ptcHandle_dict = {
-        'do_FiniteDipole2D':           particleClass.finiteDipole2D,
-        'do_LimFiniteDipole2D':        particleClass.limFiniteDipole2D,
-        'do_behaviorParticle2D':       particleClass.particle2D,
-        'do_behaviorWienerParticle2D': particleClass.particle2D,
-        'do_actLimFiniteDipole2D':     particleClass.limFiniteDipole2D,
-    }
-
     OptDB = PETSc.Options()
 
     ini_t = np.float64(OptDB.getReal('ini_t', 0))
@@ -59,6 +68,7 @@ def get_problem_kwargs(**main_kwargs):
     rtol = np.float64(OptDB.getReal('rtol', 1e-3))
     atol = np.float64(OptDB.getReal('atol', 1e-6))
     eval_dt = np.float64(OptDB.getReal('eval_dt', 0.01))
+    save_dt = np.float64(OptDB.getReal('save_dt', max_t))
     calculate_fun = OptDB.getString('calculate_fun', 'do_behaviorParticle2D')
     fileHandle = OptDB.getString('f', 'dbg')
     save_every = np.float64(OptDB.getReal('save_every', 1))
@@ -112,8 +122,7 @@ def get_problem_kwargs(**main_kwargs):
 
 
 def do_pickle(prb1: problemClass._baseProblem, **kwargs):
-    fileHandle = kwargs['fileHandle']
-    prb1.pickmyself('%s.pickle' % fileHandle)
+    prb1.pickmyself(**kwargs)
     return True
 
 
@@ -123,15 +132,35 @@ def main_profile(**main_kwargs):
 
 
 def main_fun(**main_kwargs):
+    comm = PETSc.COMM_WORLD.tompi4py()
+    rank = comm.Get_rank()
     problem_kwargs = get_problem_kwargs(**main_kwargs)
     max_t = problem_kwargs['max_t']
     ini_t = problem_kwargs['ini_t']
     eval_dt = problem_kwargs['eval_dt']
+    # fileHandle = problem_kwargs['fileHandle']
+    # PWD = os.getcwd()
 
     # spf.petscInfo(self.father.logger, problem_kwargs)
     doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
     prb1 = doPrb1.do_calculate(ini_t=ini_t, max_t=max_t, eval_dt=eval_dt, )
     do_pickle(prb1, **problem_kwargs)
+
+    # export figure
+    if rank == 0:
+        # setup
+        figsize = np.array((10, 10)) * 1
+        dpi = 100
+        resampling_fct, interp1d_kind = None, 'linear'
+
+        t1 = np.linspace(prb1.t0, prb1.t1, 11)
+        for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
+            filename = '%s/fig_%d.png' % (prb1.name, i0)
+            sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                             plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
+        filename = '%s/fig.png' % prb1.name
+        sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                         plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct)
     return True
 
 
