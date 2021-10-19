@@ -432,6 +432,12 @@ class _baseProblem(baseClass.baseObj):
             return True
 
     def _monitor(self, ts, i, t, Y):
+        return True
+
+    def _postfunction(self, ts):
+        i = ts.getStepNumber()  # number of steps completed so far.
+        t = ts.getTime()  # the current time.
+        Y = ts.getSolution()  # Returns the solution at the present timestep.
         comm = PETSc.COMM_WORLD.tompi4py()
         rank = comm.Get_rank()
         save_every = self._save_every
@@ -444,10 +450,6 @@ class _baseProblem(baseClass.baseObj):
                 self.percentage = self.percentage + dp
             self._do_store_data(ts, i, t, Y)
         return True
-
-    @abc.abstractmethod
-    def _postfunction(self, ts):
-        return
 
     def update_finish(self, ts):
         comm = PETSc.COMM_WORLD.tompi4py()
@@ -611,9 +613,6 @@ class _base2DProblem(_baseProblem):
         # spf.petscInfo(self.logger, '%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
         #     F.getArray()[0], F.getArray()[1], F.getArray()[2],
         #     F.getArray()[3], F.getArray()[4], F.getArray()[5], ))
-        return True
-
-    def _postfunction(self, ts):
         return True
 
 

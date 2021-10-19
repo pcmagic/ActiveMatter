@@ -197,7 +197,7 @@ class do_LimFiniteDipole2D(do_FiniteDipole2D):
 
 class do_behaviorParticle2D(_base_do2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun', 'align', 'attract']
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
         assert kwargs['update_fun'] == "1fe", err_msg
         err_msg = 'wrong parameter update_order, only (0, 0) is acceptable. '
@@ -205,15 +205,17 @@ class do_behaviorParticle2D(_base_do2D):
         err_msg = 'wrong parameter ln, only -1 is acceptable. '
         assert np.isclose(kwargs['ln'], -1), err_msg
 
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
 
     def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
         self.problem.add_act(act1)
-        act3 = interactionClass.Attract2D(name='Attract2D')
-        self.problem.add_act(act3)
-        act4 = interactionClass.Align2D(name='Align2D')
-        self.problem.add_act(act4)
+        # act3 = interactionClass.Attract2D(name='Attract2D')
+        # self.problem.add_act(act3)
+        # act4 = interactionClass.Align2D(name='Align2D')
+        # self.problem.add_act(act4)
+        act5 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        self.problem.add_act(act5)
         return True
 
     def _set_problem(self, **kwargs):
@@ -273,7 +275,7 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
             tptc.phi = np.float64(spf.warpToPi(2 * np.pi * libc.rand() / (RAND_MAX + 1.0)))
             tptc.u = tun
             self.problem.add_obj(tptc)
-            t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
+            # t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
             # print("%3d, %15.10f, %15.10f, %15.10f" %
             #       (tptc.index, tptc.X[0], tptc.X[1], t1))
         return True
@@ -311,7 +313,7 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         return True
 
     def dbg_AlignAttract2D(self):
-        act5 = interactionClass.AlignAtrtract2D(name='AlignAtrtract2D')
+        act5 = interactionClass.AlignAttract2D(name='AlignAttract2D')
         self.problem.add_act(act5)
 
         self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
@@ -331,8 +333,10 @@ class do_actLimFiniteDipole2D(do_LimFiniteDipole2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
     def addInteraction(self, ):
         super().addInteraction()
-        act3 = interactionClass.Attract2D(name='Attract2D')
-        self.problem.add_act(act3)
-        act4 = interactionClass.Align2D(name='Align2D')
-        self.problem.add_act(act4)
+        # act3 = interactionClass.Attract2D(name='Attract2D')
+        # self.problem.add_act(act3)
+        # act4 = interactionClass.Align2D(name='Align2D')
+        # self.problem.add_act(act4)
+        act5 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        self.problem.add_act(act5)
         return True

@@ -68,7 +68,6 @@ def get_problem_kwargs(**main_kwargs):
     rtol = np.float64(OptDB.getReal('rtol', 1e-3))
     atol = np.float64(OptDB.getReal('atol', 1e-6))
     eval_dt = np.float64(OptDB.getReal('eval_dt', 0.01))
-    save_dt = np.float64(OptDB.getReal('save_dt', max_t))
     calculate_fun = OptDB.getString('calculate_fun', 'do_behaviorParticle2D')
     fileHandle = OptDB.getString('f', 'dbg')
     save_every = np.float64(OptDB.getReal('save_every', 1))

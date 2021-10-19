@@ -274,7 +274,7 @@ class Align2D(_baseAction2D):
         return np.zeros(2), Wi
 
 
-class AlignAtrtract2D(_baseAction2D):
+class AlignAttract2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
         prb = self.father  # type: problemClass.behavior2DProblem
         obji_idx = obji.index
