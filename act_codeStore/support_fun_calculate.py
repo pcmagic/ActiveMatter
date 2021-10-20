@@ -52,15 +52,22 @@ class _base_doCalculate(baseClass.baseObj):
 
 class _base_do2D(_base_doCalculate):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
-    def __init__(self, nptc, overlap_epsilon=1e-2, un=1, ln=1, Xlim=3, seed=None, fileHandle='...',
-                 prbHandle=problemClass._base2DProblem,
-                 rltHandle=relationClass._baseRelation2D,
-                 ptcHandle=particleClass.particle2D,
-                 **kwargs):
+    def __init__(self, **kwargs):
+        nptc = kwargs['nptc']
+        overlap_epsilon = kwargs['overlap_epsilon']
+        un = kwargs['un']
+        ln = kwargs['ln']
+        Xlim = kwargs['Xlim']
+        seed = kwargs['seed']
+        fileHandle = kwargs['fileHandle']
+        prbHandle = kwargs['prbHandle']
+        rltHandle = kwargs['rltHandle']
+        ptcHandle = kwargs['ptcHandle']
+
         super().__init__(**kwargs)
-        err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
-        assert nptc > 4, err_msg
-        self._problem = prbHandle(name=fileHandle)
+        # err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
+        # assert nptc > 4, err_msg
+        self._problem = prbHandle(name=fileHandle, **kwargs)
         spf.petscInfo(self.problem.logger, '#' * 72)
         spf.petscInfo(self.problem.logger, 'Generate Problem. ')
 
@@ -160,6 +167,7 @@ class _base_do2D(_base_doCalculate):
             tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
             tptc.u = tun
             self.problem.add_obj(tptc)
+        spf.petscInfo(self.problem.logger, '  Generate %d particles with random seed %s' % (self.un.size, self.seed), )
         return True
 
     @abc.abstractmethod
@@ -198,13 +206,8 @@ class do_LimFiniteDipole2D(do_FiniteDipole2D):
 class do_behaviorParticle2D(_base_do2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun', 'align', 'attract']
     def __init__(self, *args, **kwargs):
-        err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
-        assert kwargs['update_fun'] == "1fe", err_msg
-        err_msg = 'wrong parameter update_order, only (0, 0) is acceptable. '
-        assert kwargs['update_order'] == (0, 0), err_msg
         err_msg = 'wrong parameter ln, only -1 is acceptable. '
         assert np.isclose(kwargs['ln'], -1), err_msg
-
         super().__init__(*args, **kwargs)
 
     def addInteraction(self):
@@ -214,8 +217,8 @@ class do_behaviorParticle2D(_base_do2D):
         # self.problem.add_act(act3)
         # act4 = interactionClass.Align2D(name='Align2D')
         # self.problem.add_act(act4)
-        act5 = interactionClass.AlignAttract2D(name='AlignAttract2D')
-        self.problem.add_act(act5)
+        act6 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        self.problem.add_act(act6)
         return True
 
     def _set_problem(self, **kwargs):
@@ -229,6 +232,13 @@ class do_behaviorWienerParticle2D(do_behaviorParticle2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun',
     #                     'align', 'attract',
     #                     'rot_noise', 'trs_noise']
+    def __init__(self, *args, **kwargs):
+        err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
+        assert kwargs['update_fun'] == "1fe", err_msg
+        err_msg = 'wrong parameter update_order, only (0, 0) is acceptable. '
+        assert kwargs['update_order'] == (0, 0), err_msg
+        super().__init__(*args, **kwargs)
+
     def addInteraction(self):
         super().addInteraction()
         act5 = interactionClass.Wiener2D(name='Wiener2D')
@@ -278,6 +288,7 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
             # t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
             # print("%3d, %15.10f, %15.10f, %15.10f" %
             #       (tptc.index, tptc.X[0], tptc.X[1], t1))
+        spf.petscInfo(self.problem.logger, '  Generate %d particles with random seed %s' % (self.un.size, self.seed), )
         return True
 
     def dbg_Attract2D(self):
@@ -313,8 +324,8 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         return True
 
     def dbg_AlignAttract2D(self):
-        act5 = interactionClass.AlignAttract2D(name='AlignAttract2D')
-        self.problem.add_act(act5)
+        act6 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        self.problem.add_act(act6)
 
         self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
         self.problem.relationHandle.update_relation()
@@ -337,6 +348,6 @@ class do_actLimFiniteDipole2D(do_LimFiniteDipole2D):
         # self.problem.add_act(act3)
         # act4 = interactionClass.Align2D(name='Align2D')
         # self.problem.add_act(act4)
-        act5 = interactionClass.AlignAttract2D(name='AlignAttract2D')
-        self.problem.add_act(act5)
+        act6 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        self.problem.add_act(act6)
         return True

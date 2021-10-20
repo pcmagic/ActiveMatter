@@ -66,7 +66,7 @@ def get_problem_kwargs(**main_kwargs):
     max_t = np.float64(OptDB.getReal('max_t', 1))
     update_fun = OptDB.getString('update_fun', '1fe')
     rtol = np.float64(OptDB.getReal('rtol', 1e-3))
-    atol = np.float64(OptDB.getReal('atol', 1e-6))
+    atol = np.float64(OptDB.getReal('atol', rtol * 1e-3))
     eval_dt = np.float64(OptDB.getReal('eval_dt', 0.01))
     calculate_fun = OptDB.getString('calculate_fun', 'do_behaviorParticle2D')
     fileHandle = OptDB.getString('f', 'dbg')
@@ -81,12 +81,12 @@ def get_problem_kwargs(**main_kwargs):
     align = np.float64(OptDB.getReal('align', 0))
     rot_noise = np.float64(OptDB.getReal('rot_noise', 0))
     trs_noise = np.float64(OptDB.getReal('trs_noise', 0))
-    seed0 = OptDB.getBool('seed0', False)
+    seed0 = OptDB.getInt('seed0', -1)
 
-    err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
-    assert nptc > 4, err_msg
-    seed = 0 if seed0 else None
-    np.random.seed(seed0)
+    # err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
+    # assert nptc > 4, err_msg
+    seed = seed0 if seed0 >= 0 else None
+    np.random.seed(seed)
 
     problem_kwargs = {
         'ini_t':           ini_t,

@@ -51,8 +51,8 @@ np.set_printoptions(linewidth=110, precision=5)
 
 params = {
     'animation.html': 'html5',
-    'font.family': 'sans-serif',
-    'font.size': 15,
+    'font.family':    'sans-serif',
+    'font.size':      15,
 }
 preamble = r' '
 preamble = preamble + '\\usepackage{bm} '
@@ -562,7 +562,7 @@ def RBGColormap(color: np.asarray, ifcheck=True):
 
     N = 256
     vals = np.ones((N, 4)) * color
-    vals[:, 3] = np.linspace(0.1 * color[3], color[3], N)
+    vals[:, 3] = np.linspace(0.1 * color[3], 0.5 * color[3], N)
     newcmp = ListedColormap(vals)
     return newcmp
 
@@ -604,7 +604,7 @@ def resampling_data(t, X, resampling_fct=2, t_use=None, interp1d_kind='quadratic
 
 
 def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=50, resampling_fct=2,
-                   interp1d_kind='quadratic'):
+                   interp1d_kind='quadratic', tmin=-np.inf, tmax=np.inf, plt_range=None, t0_marker='s'):
     # percentage = 0
     def update_fun(num, line_list, data_list):
         num = num * stp
@@ -615,18 +615,40 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
             linei.set_data((datai[:num, 0], datai[:num, 1]))
         return line_list
 
+    tidx = (t >= tmin) * (t <= tmax)
+    data_list = np.array([resampling_data(t[tidx], obji.X_hist[tidx], resampling_fct=resampling_fct,
+                                          interp1d_kind=interp1d_kind)
+                          for obji in obj_list])
+    data_max = data_list.max(axis=0).max(axis=0)
+    data_min = data_list.min(axis=0).min(axis=0)
+    data_mid = (data_max + data_min) / 2
+    if plt_range is None:
+        plt_range = np.max(data_max - data_min)
+    print('plt_range is', plt_range)
+
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     axi.set_xlabel('$x_1$')
+    axi.set_xlim([data_mid[0] - plt_range, data_mid[0] + plt_range])
     axi.set_ylabel('$x_2$')
+    axi.set_ylim([data_mid[1] - plt_range, data_mid[1] + plt_range])
 
-    line_list = [axi.plot(obji.X_hist[0, 0], obji.X_hist[0, 1])[0] for obji in obj_list]
-    data_list = [resampling_data(t, obji.X_hist, resampling_fct=resampling_fct, interp1d_kind=interp1d_kind)
-                 for obji in obj_list]
-    t_rsp = np.linspace(t.min(), t.max(), int(t.size * resampling_fct))
+    [axi.plot(obji.X_hist[tidx, 0], obji.X_hist[tidx, 1], linestyle='None', ) for obji in obj_list]
+    [axi.scatter(obji.X_hist[tidx, 0][0], obji.X_hist[tidx, 1][0], color='k', marker=t0_marker) for obji in obj_list]
+    axi.axis('equal')
+    # tticks = np.around(np.linspace(*axi.get_xlim(), 21), decimals=2)[1::6]
+    # axi.set_xticks(tticks)
+    # axi.set_xticklabels(tticks)
+    # tticks = np.around(np.linspace(*axi.get_ylim(), 21), decimals=2)[1::6]
+    # axi.set_yticks(tticks)
+    # axi.set_yticklabels(tticks)
+    # plt.tight_layout()
+    # plt.show()
+
+    t_rsp = np.linspace(t[tidx].min(), t[tidx].max(), int(t[tidx].size * resampling_fct))
     frames = t_rsp.size // stp
     tqdm_fun = tqdm_notebook(total=frames + 2)
-    # plt.show()
+    line_list = [axi.plot(obji.X_hist[tidx][0, 0], obji.X_hist[tidx][0, 1])[0] for obji in obj_list]
     anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
                                    fargs=(line_list, data_list), )
     # tqdm_fun.update(100 - percentage)
@@ -655,7 +677,7 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
     filenameHandle, extension = os.path.splitext(filename)
     if extension[1:] in ('png', 'pdf', 'svg'):
         metadata = {
-            'Title': filenameHandle,
+            'Title':  filenameHandle,
             'Author': 'Zhang Ji'
         }
     elif extension[1:] in ('eps', 'ps',):
@@ -677,6 +699,7 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
 
 
 def core_trajectory2D(problem: 'problemClass._base2DProblem',
+                      show_idx=None,
                       figsize=np.array((50, 50)) * 5, dpi=100, plt_tmin=-np.inf, plt_tmax=np.inf,
                       resampling_fct=None, interp1d_kind='quadratic',
                       t0_marker='s', cmap=plt.get_cmap('brg'), ):
@@ -685,9 +708,12 @@ def core_trajectory2D(problem: 'problemClass._base2DProblem',
     tidx = (problem.t_hist >= plt_tmin) * (problem.t_hist <= plt_tmax)
     t_hist = problem.t_hist[tidx]
     norm = plt.Normalize(0.0, 1.0)
+    if show_idx is None:
+        show_idx = np.arange(problem.n_obj)
+    show_list = problem.obj_list[show_idx]
 
     if np.any(tidx):
-        for obji in problem.obj_list:
+        for obji in show_list:
             X_hist = obji.X_hist[tidx]
             if resampling_fct is not None:
                 X_hist = resampling_data(t_hist, X_hist, resampling_fct=resampling_fct, interp1d_kind=interp1d_kind)

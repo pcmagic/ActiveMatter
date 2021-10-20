@@ -569,11 +569,13 @@ def write_myscript(job_name_list, job_dir):
     return True
 
 
-def write_main_run_local(comm_list, njob_node, job_dir, random_order=False, ):
+def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
+                         local_hostname='JiUbuntu'):
     PWD = os.getcwd()
     comm_list = np.array(comm_list)
     n_comm = comm_list.size
-    pbs_name = 'main_run.pbs'
+    sh_name = 'main_run.sh'
+    pbs_name = 'pbs.main_run'
     csh_name = 'csh.main_run'
 
     t_path = os.path.join(PWD, job_dir)
@@ -599,14 +601,16 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False, ):
     t_name = os.path.join(t_path, pbs_name)
     with open(t_name, 'w') as fpbs:
         fpbs.write('#!/bin/sh\n')
-        fpbs.write('# run the job locally. ')
-        fpbs.write('\n')
+        fpbs.write('# run the job locally. \n')
+        fpbs.write('echo start job at $(date) \n')
         t2 = 'seq 0 %d | parallel -j %d -u ' % (n_comm - 1, njob_node)
         t2 = t2 + ' --sshdelay 0.1 '
-        t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n\n ' % csh_name
+        t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n' % csh_name
         fpbs.write(t2)
+        fpbs.write('echo finish job at $(date) \n')
+        fpbs.write('\n')
 
-    # generate .csh file for submit
+    # generate .csh file
     t_name = os.path.join(t_path, csh_name)
     with open(t_name, 'w') as fcsh:
         fcsh.write('#!/bin/csh -fe \n\n')
@@ -621,6 +625,31 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False, ):
         fcsh.write('if [ ${2:-false} = true ]; then \n')
         fcsh.write('    ${comm_list[$1]} \n')
         fcsh.write('fi \n\n')
+
+    # generate .sh file
+    t_name = os.path.join(t_path, sh_name)
+    with open(t_name, 'w') as fsh:
+        # check if the script run on the main node.
+        fsh.write('if [ $(hostname) == \'%s\' ]; then\n' % local_hostname)
+        fsh.write('    echo DO NOT run in the node $HOSTNAME. \n')
+        fsh.write('    exit \n')
+        fsh.write('else \n')
+        fsh.write('    echo This node is $HOSTNAME. \n')
+        fsh.write('fi \n\n')
+
+        fsh.write('t_dir=$PWD \n')
+        fsh.write('bash_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" '
+                  '>/dev/null 2>&1 && pwd )" \n')
+        fsh.write('echo Current path: \n')
+        fsh.write('echo $bash_dir \n')
+        fsh.write('cd $bash_dir \n')
+        nohup_name = 'nohup_%s.out' % '$(date +"%Y%m%d_%H%M%S")'
+        fsh.write('nohup bash %s > %s 2>&1 & \n' % (pbs_name, nohup_name))
+        fsh.write('echo Try the command to see the output information. \n')
+        fsh.write('echo tail -f %s \n' % nohup_name)
+        fsh.write('cd $t_dir \n')
+        fsh.write('\n')
+
     print('Input %d cases. ' % n_comm)
     print('Random order mode is %s. ' % random_order)
     print('Command of first case is:')

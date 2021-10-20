@@ -314,10 +314,16 @@ class _baseProblem(baseClass.baseObj):
         # pass
 
     def update_prepare(self):
+        # location
         self.Xall = np.vstack([objj.X for objj in self.obj_list])
         # self.Uall = np.vstack([objj.U for objj in self.obj_list])
         # self.Wall = np.vstack([objj.W for objj in self.obj_list])
+
+        # relation
+        self.relationHandle.update_prepare()
         self.update_step()
+
+        # action
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.update_prepare()
         self.check_self()

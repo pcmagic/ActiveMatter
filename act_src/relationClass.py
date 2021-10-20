@@ -30,6 +30,9 @@ class _baseRelation(baseClass.baseObj):
     def check_self(self, **kwargs):
         return
 
+    def update_prepare(self):
+        return True
+
     # @abc.abstractmethod
     def update_relation(self, **kwargs):
         return
@@ -108,7 +111,7 @@ class _baseRelation2D(_baseRelation):
         theta_ij, e_rho_ij, phi_rho_ij, rho_ij = [], [], [], []
         obji: particleClass.particle2D
         for i0, obji in enumerate(prb.obj_list):
-            tPij = np.vstack([objj.X - obji.X for objj in prb.obj_list])
+            tPij = prb.Xall - obji.X
             # tPji = -tPij
             trhoij = np.linalg.norm(tPij, axis=-1)
             tphi_rhoij = np.arctan2(tPij[:, 1], tPij[:, 0])
@@ -127,7 +130,7 @@ class _baseRelation2D(_baseRelation):
     #     theta_ij, e_rho_ij, rho_ij = [], [], []
     #     for obji in prb.obj_list:
     #         # ei, ri = obji.P1, obji.X
-    #         tPij = np.vstack([objj.X - obji.X for objj in prb.obj_list])
+    #         tPij = prb.Xall - obji.X
     #         e_rho_ij.append(tPij)
     #         # tPji = -tPij
     #         trhoij = np.linalg.norm(tPij, axis=-1)
@@ -171,7 +174,7 @@ class finiteRelation2D(_baseRelation2D):
         prb = self.father  # type: problemClass._baseProblem
         rho_ij = []
         for obji in prb.obj_list:
-            tPij = np.vstack([objj.X - obji.X for objj in prb.obj_list])
+            tPij = prb.Xall - obji.X
             trhoij = np.linalg.norm(tPij, axis=-1)
             rho_ij.append(trhoij)
         self._rho_ij = np.vstack(rho_ij)
@@ -188,6 +191,10 @@ class limFiniteRelation2D(finiteRelation2D):
 
 
 class VoronoiBaseRelation2D(_baseRelation2D):
+    def __init__(self, name='...', **kwargs):
+        super().__init__(name=name, **kwargs)
+        self._fun_update_neighbor = None
+
     def cal_theta_rho(self):
         prb = self.father  # type: problemClass._baseProblem
         theta_ij, rho_ij = [], []
@@ -195,7 +202,7 @@ class VoronoiBaseRelation2D(_baseRelation2D):
         obji: particleClass.particle2D
         for i0, obji in enumerate(prb.obj_list):
             tPij = prb.Xall - obji.X
-            # tPij = np.vstack([objj.X - obji.X for objj in prb.obj_list])
+            # tPij = prb.Xall - obji.X
             # tPji = -tPij
             tphi_rhoij = np.arctan2(tPij[:, 1], tPij[:, 0])
             trhoij = np.linalg.norm(tPij, axis=-1)
@@ -208,13 +215,20 @@ class VoronoiBaseRelation2D(_baseRelation2D):
         self._theta_ij = np.vstack(theta_ij)
         return True
 
+    def update_prepare(self):
+        if self.father.n_obj > 4:
+            self._fun_update_neighbor = self.update_neighbor_voronoi
+        else:
+            self._fun_update_neighbor = self.update_neighbor_all
+        return True
+
     def update_relation(self, **kwargs):
         self.cal_theta_rho()
         return True
 
-    def update_neighbor(self, **kwargs):
+    def update_neighbor_voronoi(self, **kwargs):
         prb = self.father  # type: problemClass._baseProblem
-        X_list = np.array([obji.X for obji in prb.obj_list])
+        X_list = prb.Xall
         vor = Voronoi(X_list)
         idx_X2ridge = [[] for _ in vor.points]
         idx_ridge: int
@@ -239,10 +253,21 @@ class VoronoiBaseRelation2D(_baseRelation2D):
                     obji.neighbor_list.append_noCheck(prb.obj_list[t1[0]])
         return True
 
+    def update_neighbor_all(self, **kwargs):
+        prb = self.father  # type: problemClass._baseProblem
+        for obji in prb.obj_list:
+            obji.neighbor_list.clear()
+            for objj in prb.obj_list:
+                obji.neighbor_list.append_noCheck(objj)
+        return True
+
+    def update_neighbor(self, **kwargs):
+        return self._fun_update_neighbor(**kwargs)
+
     def dbg_showVoronoi(self, **kwargs):
         # from matplotlib import pyplot as plt
         prb = self.father  # type: problemClass._baseProblem
-        X_list = np.array([obji.X for obji in prb.obj_list])
+        X_list = prb.Xall
         vor = Voronoi(X_list)
 
         ##########################################
