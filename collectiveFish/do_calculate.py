@@ -28,6 +28,7 @@ calculate_fun_dict = {
     'do_FiniteDipole2D':           spc.do_FiniteDipole2D,
     'do_LimFiniteDipole2D':        spc.do_LimFiniteDipole2D,
     'do_behaviorParticle2D':       spc.do_behaviorParticle2D,
+    'dbg_behaviorParticle2D':      spc.dbg_behaviorParticle2D,
     'do_behaviorWienerParticle2D': spc.do_behaviorWienerParticle2D,
     'do_dbgBokaiZhang':            spc.do_dbgBokaiZhang,
     'do_actLimFiniteDipole2D':     spc.do_actLimFiniteDipole2D,
@@ -36,6 +37,7 @@ prbHandle_dict = {
     'do_FiniteDipole2D':           problemClass.finiteDipole2DProblem,
     'do_LimFiniteDipole2D':        problemClass.limFiniteDipole2DProblem,
     'do_behaviorParticle2D':       problemClass.behavior2DProblem,
+    'dbg_behaviorParticle2D':      problemClass.behavior2DProblem,
     'do_behaviorWienerParticle2D': problemClass.behavior2DProblem,
     'do_dbgBokaiZhang':            problemClass.behavior2DProblem,
     'do_actLimFiniteDipole2D':     problemClass.actLimFiniteDipole2DProblem,
@@ -44,6 +46,7 @@ rltHandle_dict = {
     'do_FiniteDipole2D':           relationClass.finiteRelation2D,
     'do_LimFiniteDipole2D':        relationClass.limFiniteRelation2D,
     'do_behaviorParticle2D':       relationClass.VoronoiBaseRelation2D,
+    'dbg_behaviorParticle2D':      relationClass.AllBaseRelation2D,
     'do_behaviorWienerParticle2D': relationClass.VoronoiBaseRelation2D,
     'do_dbgBokaiZhang':            relationClass.VoronoiBaseRelation2D,
     'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
@@ -52,6 +55,7 @@ ptcHandle_dict = {
     'do_FiniteDipole2D':           particleClass.finiteDipole2D,
     'do_LimFiniteDipole2D':        particleClass.limFiniteDipole2D,
     'do_behaviorParticle2D':       particleClass.particle2D,
+    'dbg_behaviorParticle2D':      particleClass.particle2D,
     'do_behaviorWienerParticle2D': particleClass.particle2D,
     'do_dbgBokaiZhang':            particleClass.particle2D,
     'do_actLimFiniteDipole2D':     particleClass.limFiniteDipole2D,
@@ -131,6 +135,7 @@ def main_profile(**main_kwargs):
 
 
 def main_fun(**main_kwargs):
+    OptDB = PETSc.Options()
     comm = PETSc.COMM_WORLD.tompi4py()
     rank = comm.Get_rank()
     problem_kwargs = get_problem_kwargs(**main_kwargs)
@@ -152,11 +157,13 @@ def main_fun(**main_kwargs):
         dpi = 100
         resampling_fct, interp1d_kind = None, 'linear'
 
-        t1 = np.linspace(prb1.t0, prb1.t1, 11)
-        for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
-            filename = '%s/fig_%d.png' % (prb1.name, i0)
-            sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-                             plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
+        save_sub_fig = OptDB.getBool('save_sub_fig', True)
+        if save_sub_fig:
+            t1 = np.linspace(prb1.t0, prb1.t1, 11)
+            for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
+                filename = '%s/fig_%d.png' % (prb1.name, i0)
+                sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                                 plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
         filename = '%s/fig.png' % prb1.name
         sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
                          plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct)

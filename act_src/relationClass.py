@@ -30,7 +30,7 @@ class _baseRelation(baseClass.baseObj):
     def check_self(self, **kwargs):
         return
 
-    def update_prepare(self):
+    def update_prepare(self, **kwargs):
         return True
 
     # @abc.abstractmethod
@@ -286,4 +286,10 @@ class VoronoiBaseRelation2D(_baseRelation2D):
         #     print(obji.index, [objj.index for objj in obji.neighbor_list])
         # print(idx_X2ridge)
 
+        return True
+
+
+class AllBaseRelation2D(VoronoiBaseRelation2D):
+    def update_prepare(self):
+        self._fun_update_neighbor = self.update_neighbor_all
         return True

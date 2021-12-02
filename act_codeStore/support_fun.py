@@ -579,6 +579,7 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
     csh_name = 'csh.main_run'
 
     t_path = os.path.join(PWD, job_dir)
+    print()
     if not os.path.exists(t_path):
         os.makedirs(t_path)
         print('make folder %s' % t_path)

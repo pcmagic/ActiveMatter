@@ -27,6 +27,9 @@ from act_codeStore import support_fun as spf
 
 class _baseProblem(baseClass.baseObj):
     def __init__(self, name='...', tqdm_fun=tqdm_notebook, **kwargs):
+        OptDB = PETSc.Options()
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
         super().__init__(name, **kwargs)
         # self._type = 'baseProblem'
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
@@ -45,11 +48,12 @@ class _baseProblem(baseClass.baseObj):
 
         # clear dir
         fileHandle = self.name
-        if os.path.exists(fileHandle) and os.path.isdir(fileHandle):
-            shutil.rmtree(fileHandle)
-            print('remove folder %s' % fileHandle)
-        os.makedirs(fileHandle)
-        print('make folder %s' % fileHandle)
+        if rank == 0:
+            if os.path.exists(fileHandle) and os.path.isdir(fileHandle):
+                shutil.rmtree(fileHandle)
+                spf.petscInfo(self.logger, 'remove folder %s' % fileHandle)
+            os.makedirs(fileHandle)
+            spf.petscInfo(self.logger, 'make folder %s' % fileHandle)
 
         logging.basicConfig(handlers=[logging.FileHandler(filename=self.log_filename, mode='w'),
                                       logging.StreamHandler()],
@@ -75,6 +79,8 @@ class _baseProblem(baseClass.baseObj):
         self._t_hist = []
         self._dt_hist = []
         self._tmp_idx = []  # temporary globe idx
+        self._update_start_time = 0
+        self._update_stop_time = 0
 
     @property
     def dimension(self):
@@ -478,6 +484,8 @@ class _baseProblem(baseClass.baseObj):
 
         time.sleep(0.1)
         spf.petscInfo(self.logger, 'Solve, finish time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self._update_stop_time = datetime.now()
+        spf.petscInfo(self.logger, 'Solve, usage time: %s' % str(self._update_stop_time - self._update_start_time))
         return True
 
     def _destroy_problem(self):
@@ -536,6 +544,7 @@ class _baseProblem(baseClass.baseObj):
 
         spf.petscInfo(self.logger, ' ')
         spf.petscInfo(self.logger, 'Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self._update_start_time = datetime.now()
         return True
 
 

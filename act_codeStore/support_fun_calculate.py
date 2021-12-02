@@ -228,6 +228,11 @@ class do_behaviorParticle2D(_base_do2D):
         return True
 
 
+class dbg_behaviorParticle2D(do_behaviorParticle2D):
+    def nothing(self):
+        pass
+
+
 class do_behaviorWienerParticle2D(do_behaviorParticle2D):
     # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun',
     #                     'align', 'attract',

@@ -690,6 +690,7 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
         matplotlib.use('Agg')
         fig = fig_handle(problem=problem, *args, **kwargs)
         fig.savefig(fname=filename, dpi=dpi, metadata=metadata)
+        plt.close(fig)
         matplotlib.use(backend)
 
     logger = problem.logger
@@ -698,11 +699,10 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
     return True
 
 
-def core_trajectory2D(problem: 'problemClass._base2DProblem',
-                      show_idx=None,
+def core_trajectory2D(problem: 'problemClass._base2DProblem', show_idx=None,
                       figsize=np.array((50, 50)) * 5, dpi=100, plt_tmin=-np.inf, plt_tmax=np.inf,
                       resampling_fct=None, interp1d_kind='quadratic',
-                      t0_marker='s', cmap=plt.get_cmap('brg'), ):
+                      t0_marker='s', cmap=plt.get_cmap('brg'), plt_full_range=True):
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     tidx = (problem.t_hist >= plt_tmin) * (problem.t_hist <= plt_tmax)
@@ -710,9 +710,15 @@ def core_trajectory2D(problem: 'problemClass._base2DProblem',
     norm = plt.Normalize(0.0, 1.0)
     if show_idx is None:
         show_idx = np.arange(problem.n_obj)
+    show_idx = np.array(show_idx)
+    err_msg = 'wrong parameter show_idx: %s' % str(show_idx)
+    assert show_idx.max() < problem.n_obj, err_msg
+    assert np.all([np.issubdtype(i0, np.integer) for i0 in show_idx]), err_msg
     show_list = problem.obj_list[show_idx]
+    range_list = problem.obj_list if plt_full_range else show_list
 
     if np.any(tidx):
+        # plot
         for obji in show_list:
             X_hist = obji.X_hist[tidx]
             if resampling_fct is not None:
@@ -729,8 +735,19 @@ def core_trajectory2D(problem: 'problemClass._base2DProblem',
                                 cmap=RBGColormap(cmap(obji.index / problem.n_obj), ifcheck=False),
                                 norm=norm)
             axi.add_collection(lc)
-            # axi.plot(X_hist[:, 0], X_hist[:, 1])
-        set_axes_equal(axi)
+            # axi.plot(X_hist[:, 0], X_hist[:, 1], ' ')
+
+        # set range
+        Xmax_all = np.array([obji.X_hist[tidx].max(axis=0) for obji in range_list])
+        Xmin_all = np.array([obji.X_hist[tidx].min(axis=0) for obji in range_list])
+        Xrng_all = Xmax_all - Xmin_all
+        targmax = np.argmax(Xrng_all, axis=0)
+        tidx = targmax[0] if Xrng_all[targmax[0]][0] > Xrng_all[targmax[1]][1] else targmax[1]
+        Xrng = np.max(Xmax_all[tidx] - Xmin_all[tidx]) * 0.55
+        Xmid = (Xmax_all[tidx] + Xmin_all[tidx]) / 2
+        axi.set_xlim(Xmid[0] - Xrng, Xmid[0] + Xrng)
+        axi.set_ylim(Xmid[1] - Xrng, Xmid[1] + Xrng)
+        # set_axes_equal(axi)
     else:
         logger = problem.logger
         logger.info(' ')
