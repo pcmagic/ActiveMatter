@@ -155,28 +155,30 @@ def main_fun(**main_kwargs):
     # spf.petscInfo(self.father.logger, problem_kwargs)
     doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
     prb1 = doPrb1.do_calculate(ini_t=ini_t, max_t=max_t, eval_dt=eval_dt, )  # type: problemClass._baseProblem
-    # prb1.dbg_t_hist(np.linspace(0, 1, 10 ** 7))
+    # prb1.dbg_t_hist(np.linspace(0, 1, 10 ** 8))
     # do_pickle(prb1, **problem_kwargs)
     do_hdf5(prb1, **problem_kwargs)
-    # prb1.hdf5_load()
+    prb1.hdf5_load()
+    # import time
+    # time.sleep(2)
 
-    # # export figure
-    # if rank == 0:
-    #     # setup
-    #     figsize = np.array((10, 10)) * 1
-    #     dpi = 100
-    #     resampling_fct, interp1d_kind = None, 'linear'
-    #
-    #     save_sub_fig = OptDB.getBool('save_sub_fig', True)
-    #     if save_sub_fig:
-    #         t1 = np.linspace(prb1.t0, prb1.t1, 11)
-    #         for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
-    #             filename = '%s/fig_%d.png' % (prb1.name, i0)
-    #             sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-    #                              plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
-    #     filename = '%s/fig.png' % prb1.name
-    #     sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-    #                      plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct)
+    # export figure
+    if rank == 0:
+        # setup
+        figsize = np.array((10, 10)) * 1
+        dpi = 100
+        resampling_fct, interp1d_kind = None, 'linear'
+
+        save_sub_fig = OptDB.getBool('save_sub_fig', True)
+        if save_sub_fig:
+            t1 = np.linspace(prb1.t0, prb1.t1, 11)
+            for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
+                filename = '%s/fig_%d.png' % (prb1.name, i0)
+                sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                                 plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
+        filename = '%s/fig.png' % prb1.name
+        sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                         plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct)
     return True
 
 
