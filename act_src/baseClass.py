@@ -72,3 +72,6 @@ class baseObj:
 
     def destroy_self(self, **kwargs):
         pass
+
+    def empty_hist(self, **kwargs):
+        pass

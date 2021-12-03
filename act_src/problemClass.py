@@ -16,6 +16,7 @@ from datetime import datetime
 import time
 import shutil
 import os
+import h5py
 
 from act_src import baseClass
 from act_src import particleClass
@@ -45,6 +46,12 @@ class _baseProblem(baseClass.baseObj):
         self._pickle_filename = os.path.join(self.name, 'pickle.%s' % self.name)
         self._log_filename = os.path.join(self.name, 'log.%s' % self.name)
         self._logger = logging.getLogger()
+        # self._hdf5 = None
+        self._hdf5_name = os.path.join(self.name, 'hdf5.%s' % self.name)
+        self._hdf5_kwargs = {'chunks': True,
+                             # 'compression': 'lzf',
+                             # 'compression_opts': 9,
+                             }
 
         # clear dir
         fileHandle = self.name
@@ -155,6 +162,18 @@ class _baseProblem(baseClass.baseObj):
     @property
     def logger(self):
         return self._logger
+
+    # @property
+    # def hdf5(self):
+    #     return self._hdf5
+
+    @property
+    def hdf5_name(self):
+        return self._hdf5_name
+
+    @property
+    def hdf5_kwargs(self):
+        return self._hdf5_kwargs
 
     @property
     def comm(self):
@@ -505,6 +524,20 @@ class _baseProblem(baseClass.baseObj):
         self.relationHandle.destroy_self()
         return True
 
+    def _empty_problem(self):
+        self._t_hist = np.nan
+        self._dt_hist = np.nan
+        return True
+
+    def empty_hist(self, **kwargs):
+        self._empty_problem()
+        for obji in self.obj_list:  # type: particleClass._baseParticle
+            obji.empty_hist()
+        for acti in self.action_list:  # type: interactionClass._baseAction
+            acti.empty_hist()
+        self.relationHandle.empty_hist()
+        return True
+
     def pickmyself(self, **kwargs):
         comm = PETSc.COMM_WORLD.tompi4py()
         rank = comm.Get_rank()
@@ -518,6 +551,33 @@ class _baseProblem(baseClass.baseObj):
         if rank == 0:
             with open(self.pickle_filename, 'wb') as handle:
                 pickle.dump(self, handle, protocol=4)
+        return True
+
+    def hdf5_pick(self, **kwargs):
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
+        if rank == 0:
+            # tsize = self.t_hist.size
+            hdf5_kwargs = self.hdf5_kwargs
+            with h5py.File(self.hdf5_name, 'w') as handle:
+                prb_hist = handle.create_group(self.name)
+                prb_hist.create_dataset('t_hist', data=self.t_hist, **hdf5_kwargs)
+                prb_hist.create_dataset('dt_hist', data=self.dt_hist, **hdf5_kwargs)
+                for obji in self.obj_list:  # type: particleClass._baseParticle
+                    obji.hdf5_pick(handle, **kwargs)
+        return True
+
+    def hdf5_load(self, hdf5_name=None, **kwargs):
+        # comm = PETSc.COMM_WORLD.tompi4py()
+        # rank = comm.Get_rank()
+
+        hdf5_name = self.hdf5_name if hdf5_name is None else hdf5_name
+        with h5py.File(hdf5_name, 'r') as handle:
+            prb_hist = handle[self.name]
+            self._t_hist = prb_hist['t_hist'][:]
+            self._dt_hist = prb_hist['dt_hist'][:]
+            for obji in self.obj_list:  # type: # particleClass._baseParticle
+                obji.hdf5_load(handle, **kwargs)
         return True
 
     def print_self_info(self):
@@ -545,6 +605,10 @@ class _baseProblem(baseClass.baseObj):
         spf.petscInfo(self.logger, ' ')
         spf.petscInfo(self.logger, 'Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         self._update_start_time = datetime.now()
+        return True
+
+    def dbg_t_hist(self, t_hist):
+        self._t_hist = t_hist
         return True
 
 

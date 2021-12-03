@@ -190,9 +190,37 @@ class _baseParticle(baseClass.baseObj):
     def update_position(self, **kwargs):
         return
 
-    @abc.abstractmethod
-    def do_store_data(self, **kwargs):
+    def update_velocity(self, U, W, **kwargs):
+        self.U = U
+        self.W = W
         return True
+
+    def do_store_data(self, **kwargs):
+        self.X_hist.append(self.X.copy())
+        self.U_hist.append(self.U.copy())
+        self.W_hist.append(self.W.copy())
+        return True
+
+    def empty_hist(self, **kwargs):
+        self._X_hist = np.nan
+        self._U_hist = np.nan
+        self._W_hist = np.nan
+        return True
+
+    def hdf5_pick(self, handle, **kwargs):
+        hdf5_kwargs = self.father.hdf5_kwargs
+        obji_hist = handle.create_group(self.name)
+        obji_hist.create_dataset('X_hist', data=self.X_hist, **hdf5_kwargs)
+        obji_hist.create_dataset('U_hist', data=self.U_hist, **hdf5_kwargs)
+        obji_hist.create_dataset('W_hist', data=self.W_hist, **hdf5_kwargs)
+        return obji_hist
+
+    def hdf5_load(self, handle, **kwargs):
+        obji_hist = handle[self.name]
+        self._X_hist = obji_hist['X_hist'][:]
+        self._U_hist = obji_hist['U_hist'][:]
+        self._W_hist = obji_hist['W_hist'][:]
+        return obji_hist
 
     def check_self(self, **kwargs):
         err_msg = 'wrong parameter value: %s '
@@ -225,6 +253,7 @@ class particle2D(_baseParticle):
         self._P1 = np.array((1, 0))  # major norm P1, for 2D version
         self._phi = 0  # angular coordinate of P1
         self._phi_hist = []  # major norm P1, for 2D version
+
         self._X = np.array((0, 0))  # particle center coordinate
         self._U = np.nan * np.array((0, 0))  # particle translational velocity in global coordinate
         self._W = np.nan * np.array((0,))  # particle rotational velocity in global coordinate
@@ -280,17 +309,26 @@ class particle2D(_baseParticle):
         self.phi = warpToPi(phi)
         return True
 
-    def update_velocity(self, U, W, **kwargs):
-        self.U = U
-        self.W = W
+    def do_store_data(self, **kwargs):
+        super().do_store_data()
+        self.phi_hist.append(self.phi)  # phi is a float, no necessary to copy.
         return True
 
-    def do_store_data(self, **kwargs):
-        self.X_hist.append(self.X.copy())
-        self.phi_hist.append(self.phi)  # phi is a float, no necessary to copy.
-        self.U_hist.append(self.U.copy())
-        self.W_hist.append(self.W.copy())
+    def empty_hist(self, **kwargs):
+        super().empty_hist()
+        self._phi_hist = np.nan
         return True
+
+    def hdf5_pick(self, handle, **kwargs):
+        hdf5_kwargs = self.father.hdf5_kwargs
+        obji_hist = super().hdf5_pick(handle, **kwargs)
+        obji_hist.create_dataset('phi_hist', data=self.phi_hist, **hdf5_kwargs)
+        return obji_hist
+
+    def hdf5_load(self, handle, **kwargs):
+        obji_hist = super().hdf5_load(handle, **kwargs)
+        self._phi_hist = obji_hist['phi_hist'][:]
+        return obji_hist
 
     def check_self(self, **kwargs):
         super().check_self()
