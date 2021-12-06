@@ -311,10 +311,12 @@ class _baseProblem(baseClass.baseObj):
         assert np.isclose(self.dimension, obj.dimension), err_msg
         return True
 
-    def add_obj(self, obj):
+    def add_obj(self, obj: "particleClass._baseParticle"):
         self._check_add_obj(obj)
         obj.index = self.n_obj
         obj.father = self
+        obj.rot_noise = self.rot_noise
+        obj.trs_noise = self.trs_noise
         self._obj_list.append(obj)
         return True
 
@@ -716,6 +718,8 @@ class behavior2DProblem(_base2DProblem):
         super().__init__(name, **kwargs)
         self._attract = np.nan  # attract intensity
         self._align = np.nan  # align intensity
+        self._viewRange = np.ones(1) * np.pi  # how large the camera can view
+        self._lightDecayFct = 1  # how light strength decay in water, S = S0 * exp(-lightDecayFct * rho)
 
     @property
     def attract(self):
@@ -733,18 +737,38 @@ class behavior2DProblem(_base2DProblem):
     def align(self, align):
         self._align = align
 
-    def add_obj(self, obj: "particleClass._baseParticle"):
+    @property
+    def viewRange(self):
+        return self._viewRange
+
+    @viewRange.setter
+    def viewRange(self, viewRange):
+        err_msg = 'viewRange is a scale. '
+        assert viewRange.size == 1, err_msg
+        assert -np.pi <= viewRange <= np.pi
+        self._viewRange = viewRange
+
+    @property
+    def lightDecayFct(self):
+        return self._lightDecayFct
+
+    @lightDecayFct.setter
+    def lightDecayFct(self, lightDecayFct):
+        err_msg = 'lightDecayFct is a positive factor. '
+        assert lightDecayFct > 0, err_msg
+        self._lightDecayFct = lightDecayFct
+
+    def add_obj(self, obj: "particleClass.particle2D"):
         super().add_obj(obj)
         obj.attract = self.attract
         obj.align = self.align
-        obj.rot_noise = self.rot_noise
-        obj.trs_noise = self.trs_noise
+        obj.viewRange = self.viewRange
         return True
 
     def print_self_info(self):
         super().print_self_info()
-        spf.petscInfo(self.logger, '  align: %f, attract: %f' %
-                      (self.align, self.attract))
+        spf.petscInfo(self.logger, '  align: %f, attract: %f, viewRange: %f, ' %
+                      (self.align, self.attract, self.viewRange))
 
 
 class behaviorFiniteDipole2DProblem(behavior2DProblem, finiteDipole2DProblem):

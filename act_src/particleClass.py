@@ -250,6 +250,7 @@ class particle2D(_baseParticle):
         super().__init__(name, **kwargs)
         # self._type = 'particle2D'
         self._dimension = 2  # 2 for 2D
+        self._viewRange = np.ones(1) * np.pi  # how large the camera can view.
         self._P1 = np.array((1, 0))  # major norm P1, for 2D version
         self._phi = 0  # angular coordinate of P1
         self._phi_hist = []  # major norm P1, for 2D version
@@ -260,17 +261,28 @@ class particle2D(_baseParticle):
         self._neighbor_list = uniqueList(acceptType=type(self))
         self.update_phi()
 
+    @_baseParticle.father.setter
+    def father(self, father):
+        assert isinstance(father, problemClass._base2DProblem)
+        self._father = father
+
+    @property
+    def viewRange(self):
+        return self._viewRange
+
+    @viewRange.setter
+    def viewRange(self, viewRange):
+        err_msg = 'viewRange is a scale. '
+        assert viewRange.size == 1, err_msg
+        assert -np.pi <= viewRange <= np.pi
+        self._viewRange = viewRange
+
     @_baseParticle.P1.setter
     def P1(self, P1):
         # err_msg = 'wrong array size'
         # assert P1.size == 2, err_msg
         _baseParticle.P1.fset(self, P1)
         self.update_phi()
-
-    @_baseParticle.father.setter
-    def father(self, father):
-        assert isinstance(father, problemClass._base2DProblem)
-        self._father = father
 
     @property
     def phi(self):

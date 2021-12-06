@@ -251,6 +251,30 @@ class Attract2D(_baseAction2D):
         return np.zeros(2), Wi
 
 
+class lightAttract2D(_baseAction2D):
+    def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
+        prb = self.father  # type: problemClass.behavior2DProblem
+        lightDecayFct = prb.lightDecayFct
+        obji_idx = obji.index
+        viewRange = obji.viewRange
+        relationHandle = prb.relationHandle  # type: relationClass.VoronoiBaseRelation2D
+        theta_ij = relationHandle.theta_ij
+        rho_ij = relationHandle.rho_ij
+
+        Wi1 = 0
+        Wi2 = 0
+        for objj in obji.neighbor_list:  # type: particleClass.particle2D
+            objj_idx = objj.index
+            tth = theta_ij[obji_idx, objj_idx] / viewRange * np.pi
+            if -np.pi < tth < np.pi:
+                trho = rho_ij[obji_idx, objj_idx]
+                t2 = 1 + np.cos(tth)
+                Wi1 += obji.attract * np.exp(-lightDecayFct * trho) * t2
+                Wi2 += t2
+        Wi = Wi1 / Wi2
+        return np.zeros(2), Wi
+
+
 class Align2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
         prb = self.father  # type: problemClass.behavior2DProblem
@@ -291,7 +315,7 @@ class AlignAttract2D(_baseAction2D):
             tphi_ij = objj.phi - obji.phi
             trho = rho_ij[obji_idx, objj_idx]
             t2 = 1 + np.cos(tth)
-            Wi1 += obji.align * obji.u * np.sin(tphi_ij) * t2 +\
+            Wi1 += obji.align * obji.u * np.sin(tphi_ij) * t2 + \
                    obji.attract * trho * np.sin(tth) * t2
             Wi2 += t2
             # print()

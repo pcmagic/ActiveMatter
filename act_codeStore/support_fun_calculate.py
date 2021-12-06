@@ -40,10 +40,11 @@ from act_codeStore import support_fun as spf
 class _base_doCalculate(baseClass.baseObj):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._kwargs_necessary = []
 
     @abc.abstractmethod
-    def ini_kwargs(self, **kwargs):
-        return
+    def ini_kwargs(self):
+        return True
 
     @abc.abstractmethod
     def do_calculate(self, **kwargs):
@@ -51,8 +52,18 @@ class _base_doCalculate(baseClass.baseObj):
 
 
 class _base_do2D(_base_doCalculate):
-    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
+    def ini_kwargs(self):
+        super().ini_kwargs()
+        self._kwargs_necessary = self._kwargs_necessary + ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
+        return True
+
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.ini_kwargs()
+        for tkwargs in self._kwargs_necessary:
+            err_msg = 'lost necessary parameter: %s' % tkwargs
+            assert tkwargs in kwargs.keys(), err_msg
+
         nptc = kwargs['nptc']
         overlap_epsilon = kwargs['overlap_epsilon']
         un = kwargs['un']
@@ -64,7 +75,6 @@ class _base_do2D(_base_doCalculate):
         rltHandle = kwargs['rltHandle']
         ptcHandle = kwargs['ptcHandle']
 
-        super().__init__(**kwargs)
         # err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
         # assert nptc > 4, err_msg
         self._problem = prbHandle(name=fileHandle, **kwargs)
@@ -184,7 +194,6 @@ class _base_do2D(_base_doCalculate):
 
 
 class do_FiniteDipole2D(_base_do2D):
-    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
     def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
         self.problem.add_act(act1)
@@ -194,7 +203,6 @@ class do_FiniteDipole2D(_base_do2D):
 
 
 class do_LimFiniteDipole2D(do_FiniteDipole2D):
-    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
     def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
         self.problem.add_act(act1)
@@ -204,11 +212,12 @@ class do_LimFiniteDipole2D(do_FiniteDipole2D):
 
 
 class do_behaviorParticle2D(_base_do2D):
-    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun', 'align', 'attract']
-    def __init__(self, *args, **kwargs):
+    def ini_kwargs(self):
+        super().ini_kwargs()
         err_msg = 'wrong parameter ln, only -1 is acceptable. '
-        assert np.isclose(kwargs['ln'], -1), err_msg
-        super().__init__(*args, **kwargs)
+        assert np.isclose(self.kwargs['ln'], -1), err_msg
+        self._kwargs_necessary = self._kwargs_necessary + ['align', 'attract', 'viewRange']
+        return True
 
     def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
@@ -225,6 +234,7 @@ class do_behaviorParticle2D(_base_do2D):
         super()._set_problem(**kwargs)
         self.problem.align = kwargs['align']
         self.problem.attract = kwargs['attract']
+        self.problem.viewRange = kwargs['viewRange']
         return True
 
 
@@ -234,15 +244,14 @@ class dbg_behaviorParticle2D(do_behaviorParticle2D):
 
 
 class do_behaviorWienerParticle2D(do_behaviorParticle2D):
-    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun',
-    #                     'align', 'attract',
-    #                     'rot_noise', 'trs_noise']
-    def __init__(self, *args, **kwargs):
+    def ini_kwargs(self):
+        super().ini_kwargs()
         err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
-        assert kwargs['update_fun'] == "1fe", err_msg
+        assert self.kwargs['update_fun'] == "1fe", err_msg
         err_msg = 'wrong parameter update_order, only (0, 0) is acceptable. '
-        assert kwargs['update_order'] == (0, 0), err_msg
-        super().__init__(*args, **kwargs)
+        assert self.kwargs['update_order'] == (0, 0), err_msg
+        self._kwargs_necessary = self._kwargs_necessary + ['rot_noise', 'trs_noise']
+        return True
 
     def addInteraction(self):
         super().addInteraction()
@@ -258,28 +267,6 @@ class do_behaviorWienerParticle2D(do_behaviorParticle2D):
 
 
 class do_dbgBokaiZhang(do_behaviorParticle2D):
-    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun',
-    #                     'align', 'attract',
-    #                     'rot_noise', 'trs_noise']
-
-    # void initialize_particles() {
-    #     int i, j;
-    #     double dx, dy, dr, dr2;
-    #     double tempx, tempy, temp_ori;
-    #     srand(1);
-    #
-    #     particles = (struct particles_struct * ) calloc(N, sizeof(struct particles_struct));
-    #
-    #     for (i = 0; i < N; i++) {
-    #         particles[i].ID = i + 1;
-    #         particles[i].x = SX * rand() / (RAND_MAX + 1.0);
-    #         particles[i].y = SY * rand() / (RAND_MAX + 1.0);
-    #         particles[i].ori = 2 * PI * rand() / (RAND_MAX + 1.0);
-    #         printf("%3d, %15.10f, %15.10f, %15.10f \n",
-    #             particles[i].ID, particles[i].x, particles[i].y, particles[i].ori);
-    #     }
-    # }
-
     def _set_particle(self):
         libc = CDLL("libc.so.6")
         libc.srand(self.seed)
@@ -345,14 +332,21 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         return True
 
 
-class do_actLimFiniteDipole2D(do_LimFiniteDipole2D):
-    # kwargs_necessary = ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
-    def addInteraction(self, ):
-        super().addInteraction()
-        # act3 = interactionClass.Attract2D(name='Attract2D')
-        # self.problem.add_act(act3)
-        # act4 = interactionClass.Align2D(name='Align2D')
-        # self.problem.add_act(act4)
+class do_actLimFiniteDipole2D(do_behaviorParticle2D, do_LimFiniteDipole2D):
+    def addInteraction(self):
+        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        self.problem.add_act(act1)
+        act2 = interactionClass.limFiniteDipole2D(name='FiniteDipole2D')
+        self.problem.add_act(act2)
         act6 = interactionClass.AlignAttract2D(name='AlignAttract2D')
         self.problem.add_act(act6)
+        return True
+
+
+class do_actLight2D(do_behaviorParticle2D):
+    def addInteraction(self):
+        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        self.problem.add_act(act1)
+        actLight = interactionClass.lightAttract2D(name='lightAttract2D')
+        self.problem.add_act(actLight)
         return True

@@ -32,6 +32,7 @@ calculate_fun_dict = {
     'do_behaviorWienerParticle2D': spc.do_behaviorWienerParticle2D,
     'do_dbgBokaiZhang':            spc.do_dbgBokaiZhang,
     'do_actLimFiniteDipole2D':     spc.do_actLimFiniteDipole2D,
+    'do_actLight2D':               spc.do_actLight2D,
 }
 prbHandle_dict = {
     'do_FiniteDipole2D':           problemClass.finiteDipole2DProblem,
@@ -41,6 +42,7 @@ prbHandle_dict = {
     'do_behaviorWienerParticle2D': problemClass.behavior2DProblem,
     'do_dbgBokaiZhang':            problemClass.behavior2DProblem,
     'do_actLimFiniteDipole2D':     problemClass.actLimFiniteDipole2DProblem,
+    'do_actLight2D':               problemClass.actLimFiniteDipole2DProblem,
 }
 rltHandle_dict = {
     'do_FiniteDipole2D':           relationClass.finiteRelation2D,
@@ -50,6 +52,7 @@ rltHandle_dict = {
     'do_behaviorWienerParticle2D': relationClass.VoronoiBaseRelation2D,
     'do_dbgBokaiZhang':            relationClass.VoronoiBaseRelation2D,
     'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
+    'do_actLight2D':               relationClass.AllBaseRelation2D,
 }
 ptcHandle_dict = {
     'do_FiniteDipole2D':           particleClass.finiteDipole2D,
@@ -59,6 +62,7 @@ ptcHandle_dict = {
     'do_behaviorWienerParticle2D': particleClass.particle2D,
     'do_dbgBokaiZhang':            particleClass.particle2D,
     'do_actLimFiniteDipole2D':     particleClass.limFiniteDipole2D,
+    'do_actLight2D':               particleClass.limFiniteDipole2D,
 }
 
 
@@ -83,6 +87,7 @@ def get_problem_kwargs(**main_kwargs):
     Xlim = np.float64(OptDB.getReal('Xlim', 3))
     attract = np.float64(OptDB.getReal('attract', 0))
     align = np.float64(OptDB.getReal('align', 0))
+    viewRange = np.float64(OptDB.getReal('viewRange', np.pi))
     rot_noise = np.float64(OptDB.getReal('rot_noise', 0))
     trs_noise = np.float64(OptDB.getReal('trs_noise', 0))
     seed0 = OptDB.getInt('seed0', -1)
@@ -111,6 +116,7 @@ def get_problem_kwargs(**main_kwargs):
         'Xlim':            Xlim,
         'attract':         attract,
         'align':           align,
+        'viewRange':       viewRange,
         'rot_noise':       rot_noise,
         'trs_noise':       trs_noise,
         'seed':            seed,
@@ -136,15 +142,38 @@ def do_hdf5(prb1: problemClass._baseProblem, **kwargs):
     return True
 
 
+def export_figure(prb1: problemClass._baseProblem, **kwargs):
+    OptDB = PETSc.Options()
+    comm = PETSc.COMM_WORLD.tompi4py()
+    rank = comm.Get_rank()
+
+    # setup
+    figsize = np.array((10, 10)) * 1
+    dpi = 100
+    resampling_fct, interp1d_kind = None, 'linear'
+    save_fig = OptDB.getBool('save_fig', True)
+    save_sub_fig = OptDB.getBool('save_sub_fig', True)
+
+    if rank == 0:
+        if save_sub_fig:
+            t1 = np.linspace(prb1.t0, prb1.t1, 11)
+            for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
+                filename = '%s/fig_%d.png' % (prb1.name, i0)
+                sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                                 plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
+        if save_fig:
+            filename = '%s/fig.png' % prb1.name
+            sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                             plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct)
+    return True
+
+
 @profile(filename="profile_out")
 def main_profile(**main_kwargs):
     return main_fun(**main_kwargs)
 
 
 def main_fun(**main_kwargs):
-    OptDB = PETSc.Options()
-    comm = PETSc.COMM_WORLD.tompi4py()
-    rank = comm.Get_rank()
     problem_kwargs = get_problem_kwargs(**main_kwargs)
     max_t = problem_kwargs['max_t']
     ini_t = problem_kwargs['ini_t']
@@ -161,24 +190,8 @@ def main_fun(**main_kwargs):
     prb1.hdf5_load()
     # import time
     # time.sleep(2)
+    export_figure(prb1)
 
-    # export figure
-    if rank == 0:
-        # setup
-        figsize = np.array((10, 10)) * 1
-        dpi = 100
-        resampling_fct, interp1d_kind = None, 'linear'
-
-        save_sub_fig = OptDB.getBool('save_sub_fig', True)
-        if save_sub_fig:
-            t1 = np.linspace(prb1.t0, prb1.t1, 11)
-            for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
-                filename = '%s/fig_%d.png' % (prb1.name, i0)
-                sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-                                 plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
-        filename = '%s/fig.png' % prb1.name
-        sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-                         plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct)
     return True
 
 
