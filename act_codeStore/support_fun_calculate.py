@@ -165,8 +165,7 @@ class _base_do2D(_base_doCalculate):
         return True
 
     def _set_relation(self):
-        self.problem.relationHandle = self.rltHandle(name='Relation2D')
-        self.problem.relationHandle.overlap_epsilon = self.overlap_epsilon
+        self.problem.relationHandle = self.rltHandle(name='Relation2D', **self.kwargs)
         return True
 
     def _set_particle(self):
@@ -174,7 +173,8 @@ class _base_do2D(_base_doCalculate):
         for tun, tln in zip(self.un, self.ln):
             tptc = self.ptcHandle(length=tln, name='ptc2D')
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
-            tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
+            # tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
+            tptc.X = np.random.uniform(-self.Xlim / 2, self.Xlim / 2, (2,))
             tptc.u = tun
             self.problem.add_obj(tptc)
         spf.petscInfo(self.problem.logger, '  Generate %d particles with random seed %s' % (self.un.size, self.seed), )
@@ -191,6 +191,8 @@ class _base_do2D(_base_doCalculate):
         self.addInteraction()
         self.problem.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
         return self.problem
+
+
 
 
 class do_FiniteDipole2D(_base_do2D):
@@ -237,7 +239,6 @@ class do_behaviorParticle2D(_base_do2D):
         self.problem.viewRange = kwargs['viewRange']
         return True
 
-
 class dbg_behaviorParticle2D(do_behaviorParticle2D):
     def nothing(self):
         pass
@@ -272,8 +273,8 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         libc.srand(self.seed)
         for tun, tln in zip(self.un, self.ln):
             tptc = self.ptcHandle(length=tln, name='ptc2D')
-            tptc.X = np.array((self.Xlim * libc.rand() / (RAND_MAX + 1.0),
-                               self.Xlim * libc.rand() / (RAND_MAX + 1.0)))
+            tptc.X = np.array((self.Xlim / 2 * libc.rand() / (RAND_MAX + 1.0),
+                               self.Xlim / 2 * libc.rand() / (RAND_MAX + 1.0)))
             tptc.phi = np.float64(spf.warpToPi(2 * np.pi * libc.rand() / (RAND_MAX + 1.0)))
             tptc.u = tun
             self.problem.add_obj(tptc)
@@ -350,3 +351,36 @@ class do_actLight2D(do_behaviorParticle2D):
         actLight = interactionClass.lightAttract2D(name='lightAttract2D')
         self.problem.add_act(actLight)
         return True
+
+
+class do_phaseLag2D(do_behaviorParticle2D):
+    def ini_kwargs(self):
+        super().ini_kwargs()
+        self._kwargs_necessary = self._kwargs_necessary + ['phaseLag2D', 'localRange']
+        return True
+
+    def addInteraction(self):
+        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        self.problem.add_act(act1)
+        act2 = interactionClass.phaseLag2D(name='phaseLag2D', phaseLag=self.kwargs['phaseLag2D'])
+        self.problem.add_act(act2)
+
+
+class do_actPeriodic2D(do_behaviorParticle2D):
+    def ini_kwargs(self):
+        super().ini_kwargs()
+        err_msg = 'wrong parameter ln, Xrange >= Xlim. '
+        assert self.kwargs['Xrange'] >= self.kwargs['Xlim'], err_msg
+        self._kwargs_necessary = self._kwargs_necessary + ['Xrange']
+        return True
+
+    def _set_problem(self, **kwargs):
+        super()._set_problem(**kwargs)
+        err_msg = 'wrong problem handle, current: %s ' % str(self.problem)
+        assert isinstance(self.problem, problemClass.actPeriodic2DProblem), err_msg
+        return True
+
+
+class do_phaseLagPeriodic2D(do_phaseLag2D, do_actPeriodic2D):
+    def _nothing(self):
+        pass

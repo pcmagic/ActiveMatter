@@ -28,9 +28,6 @@ from act_codeStore import support_fun as spf
 
 class _baseProblem(baseClass.baseObj):
     def __init__(self, name='...', tqdm_fun=tqdm_notebook, **kwargs):
-        OptDB = PETSc.Options()
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
         super().__init__(name, **kwargs)
         # self._type = 'baseProblem'
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
@@ -43,35 +40,42 @@ class _baseProblem(baseClass.baseObj):
         self._Wall = np.nan  # rotational velocity at current time
         self._Uall = np.nan  # translational velocity at current time
         self._relationHandle = relationClass._baseRelation()
-        self._pickle_filename = os.path.join(self.name, 'pickle.%s' % self.name)
-        self._log_filename = os.path.join(self.name, 'log.%s' % self.name)
-        self._logger = logging.getLogger()
+        self._pickle_name = os.path.join(self.name, 'pickle.%s' % self.name)
+        self._log_name = os.path.join(self.name, 'log.%s' % self.name)
+        self._logger = None
+        # self._logger = logging.getLogger()
         # self._hdf5 = None
         self._hdf5_name = os.path.join(self.name, 'hdf5.%s' % self.name)
-        self._hdf5_kwargs = {'chunks': True,
-                             # 'compression': 'lzf',
-                             # 'compression_opts': 9,
-                             }
+        self._hdf5_kwargs = {
+            'chunks': True,
+            # 'compression': 'lzf',
+            # 'compression_opts': 9,
+        }
 
         # clear dir
         fileHandle = self.name
-        if rank == 0:
+        tprint = False
+        if self.rank0:
+            fileHandle = self.name
+            self._logger = logging.getLogger()
             if os.path.exists(fileHandle) and os.path.isdir(fileHandle):
                 shutil.rmtree(fileHandle)
-                spf.petscInfo(self.logger, 'remove folder %s' % fileHandle)
+                tprint = True
             os.makedirs(fileHandle)
-            spf.petscInfo(self.logger, 'make folder %s' % fileHandle)
-
-        logging.basicConfig(handlers=[logging.FileHandler(filename=self.log_filename, mode='w'),
-                                      logging.StreamHandler()],
-                            level=logging.INFO,
-                            format='%(message)s', )
+            #
+            logging.basicConfig(handlers=[logging.FileHandler(filename=self.log_name, mode='w'),
+                                          logging.StreamHandler()],
+                                level=logging.INFO,
+                                format='%(message)s', )
         time.sleep(0.1)
+        #
+        if tprint:
+            spf.petscInfo(self.logger, 'remove folder %s' % fileHandle)
+        spf.petscInfo(self.logger, 'make folder %s' % fileHandle)
         spf.petscInfo(self.logger, ' ')
         spf.petscInfo(self.logger, 'Collective motion solve, Zhang Ji, 2021. ')
 
         # parameters for temporal evaluation.
-        self._comm = PETSc.COMM_WORLD
         self._save_every = 1
         self._tqdm_fun = tqdm_fun
         self._tqdm = None
@@ -152,12 +156,12 @@ class _baseProblem(baseClass.baseObj):
         self._relationHandle = relationHandle
 
     @property
-    def pickle_filename(self):
-        return self._pickle_filename
+    def pickle_name(self):
+        return self._pickle_name
 
     @property
-    def log_filename(self):
-        return self._log_filename
+    def log_name(self):
+        return self._log_name
 
     @property
     def logger(self):
@@ -174,10 +178,6 @@ class _baseProblem(baseClass.baseObj):
     @property
     def hdf5_kwargs(self):
         return self._hdf5_kwargs
-
-    @property
-    def comm(self):
-        return self._comm
 
     @property
     def save_every(self):
@@ -340,8 +340,9 @@ class _baseProblem(baseClass.baseObj):
         assert isinstance(pos, relationClass._baseRelation), err_msg
         # pass
 
-    def update_prepare(self):
+    def update_prepare(self, showInfo=True):
         # location
+        self._obj_list = np.array(self.obj_list)
         self.Xall = np.vstack([objj.X for objj in self.obj_list])
         # self.Uall = np.vstack([objj.U for objj in self.obj_list])
         # self.Wall = np.vstack([objj.W for objj in self.obj_list])
@@ -354,7 +355,8 @@ class _baseProblem(baseClass.baseObj):
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.update_prepare()
         self.check_self()
-        self.print_info()
+        if showInfo:
+            self.print_info()
         return True
 
     def update_step(self):
@@ -376,7 +378,6 @@ class _baseProblem(baseClass.baseObj):
         return True
 
     def check_self(self, **kwargs):
-        self._obj_list = np.array(self.obj_list)
         # todo: check all parameters.
         err_msg = 'wrong parameter value: %s '
         assert self.dimension in (2, 3), err_msg % 'dimension'
@@ -389,8 +390,10 @@ class _baseProblem(baseClass.baseObj):
         return True
 
     def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
-        comm = self.comm
-        rank = comm.tompi4py().Get_rank()
+        spf.petscInfo(self.logger, ' ')
+        spf.petscInfo(self.logger, 'Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        self._update_start_time = datetime.now()
         (rtol, atol) = self.update_order
         update_fun = self.update_fun
         tqdm_fun = self.tqdm_fun
@@ -400,16 +403,16 @@ class _baseProblem(baseClass.baseObj):
         self.max_it = max_it
         self.percentage = 0
         self.update_prepare()
-        if rank == 0:
+        if self.rank0:
             self.tqdm = tqdm_fun(total=100, desc='  %s' % self.name)
 
         # do simulation
         y0 = self._get_y0()
-        y = PETSc.Vec().createWithArray(y0, comm=comm)
+        y = PETSc.Vec().createWithArray(y0, comm=self.comm)
         f = y.duplicate()
         # print(f)
         # print(1111)
-        ts = PETSc.TS().create(comm=comm)
+        ts = PETSc.TS().create(comm=self.comm)
         ts.setProblemType(ts.ProblemType.NONLINEAR)
         ts.setType(ts.Type.RK)
         ts.setRKType(update_fun)
@@ -459,39 +462,36 @@ class _baseProblem(baseClass.baseObj):
             return False
         else:
             dt = ts.getTimeStep()
-            self.t_hist.append(t)
-            self.dt_hist.append(dt)
+            if self.rank0:
+                self.t_hist.append(t)
+                self.dt_hist.append(dt)
             self.update_hist()
             return True
 
     def _monitor(self, ts, i, t, Y):
-        return True
-
-    def _postfunction(self, ts):
-        i = ts.getStepNumber()  # number of steps completed so far.
-        t = ts.getTime()  # the current time.
-        Y = ts.getSolution()  # Returns the solution at the present timestep.
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
+        # i = ts.getStepNumber()  # number of steps completed so far.
+        # t = ts.getTime()  # the current time.
+        # Y = ts.getSolution()  # Returns the solution at the present timestep.
         save_every = self._save_every
         # print(ts.getTimeStep())
         if not i % save_every:
             percentage = np.clip(t / self._t1 * 100, 0, 100)
             dp = int(percentage - self.percentage)
-            if (dp >= 1) and (rank == 0):
+            if (dp >= 1) and self.rank0:
                 self.tqdm.update(dp)
                 self.percentage = self.percentage + dp
             self._do_store_data(ts, i, t, Y)
         return True
 
+    def _postfunction(self, ts):
+        return True
+
     def update_finish(self, ts):
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
-        if rank == 0:
+        if self.rank0:
             self.tqdm.update(100 - self.percentage)
             self.tqdm.close()
-        self._t_hist = np.hstack(self.t_hist)
-        self._dt_hist = np.hstack(self.dt_hist)
+            self._t_hist = np.hstack(self.t_hist)
+            self._dt_hist = np.hstack(self.dt_hist)
         # i = ts.getStepNumber()
         # t = ts.getTime()
         # Y = ts.getSolution()
@@ -507,23 +507,23 @@ class _baseProblem(baseClass.baseObj):
         spf.petscInfo(self.logger, 'Solve, finish time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         self._update_stop_time = datetime.now()
         spf.petscInfo(self.logger, 'Solve, usage time: %s' % str(self._update_stop_time - self._update_start_time))
+        spf.petscInfo(self.logger, ' ')
         return True
 
     def _destroy_problem(self):
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
-        self._comm = None
-        if rank == 0:
+        if self.rank0:
             self._tqdm = None
-        pass
+        return True
 
-    def destroy_self(self):
+    def destroy_self(self, **kwargs):
         self._destroy_problem()
+        super().destroy_self(**kwargs)
         for obji in self.obj_list:  # type: particleClass._baseParticle
             obji.destroy_self()
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.destroy_self()
-        self.relationHandle.destroy_self()
+        self.relationHandle.destroy_self(**kwargs)
+        spf.petscInfo(self.logger, 'Destroy problem: %s' % str(self))
         return True
 
     def _empty_problem(self):
@@ -538,11 +538,10 @@ class _baseProblem(baseClass.baseObj):
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.empty_hist()
         self.relationHandle.empty_hist()
+        spf.petscInfo(self.logger, 'Empty problem hist: %s' % str(self))
         return True
 
     def pickmyself(self, **kwargs):
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
         self.destroy_self()
 
         # dbg
@@ -550,9 +549,12 @@ class _baseProblem(baseClass.baseObj):
         # self._obj_list = None
         # self._action_list = None
         # self._relationHandle = None
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
         if rank == 0:
-            with open(self.pickle_filename, 'wb') as handle:
+            with open(self.pickle_name, 'wb') as handle:
                 pickle.dump(self, handle, protocol=4)
+        spf.petscInfo(self.logger, 'Pick problem: %s ' % self.pickle_name)
         return True
 
     def hdf5_pick(self, **kwargs):
@@ -567,19 +569,35 @@ class _baseProblem(baseClass.baseObj):
                 prb_hist.create_dataset('dt_hist', data=self.dt_hist, **hdf5_kwargs)
                 for obji in self.obj_list:  # type: particleClass._baseParticle
                     obji.hdf5_pick(handle, **kwargs)
+        spf.petscInfo(self.logger, 'Pick HDF5 file: %s ' % self.hdf5_name)
         return True
 
-    def hdf5_load(self, hdf5_name=None, **kwargs):
-        # comm = PETSc.COMM_WORLD.tompi4py()
-        # rank = comm.Get_rank()
+    def hdf5_load(self, hdf5_name=None, showInfo=False, **kwargs):
+        comm = PETSc.COMM_WORLD.tompi4py()
+        rank = comm.Get_rank()
+
+        if showInfo:
+            spf.petscInfo(self.logger, 'Load problem: %s ' % self.hdf5_name)
 
         hdf5_name = self.hdf5_name if hdf5_name is None else hdf5_name
-        with h5py.File(hdf5_name, 'r') as handle:
-            prb_hist = handle[self.name]
-            self._t_hist = prb_hist['t_hist'][:]
-            self._dt_hist = prb_hist['dt_hist'][:]
-            for obji in self.obj_list:  # type: # particleClass._baseParticle
-                obji.hdf5_load(handle, **kwargs)
+        if rank == 0:
+            with h5py.File(hdf5_name, 'r') as handle:
+                prb_hist = handle[self.name]
+                self._t_hist = prb_hist['t_hist'][:]
+                self._dt_hist = prb_hist['dt_hist'][:]
+                for obji in self.obj_list:  # type: # particleClass._baseParticle
+                    obji.hdf5_load(handle, **kwargs)
+
+        for obji in self.obj_list:  # type: # particleClass._baseParticle
+            obji.father = self
+        self.relationHandle.father = self
+        for act in self.action_list:
+            act.father = self
+        self.update_prepare(showInfo=showInfo)
+
+        if showInfo:
+            spf.petscInfo(self.logger, ' ')
+            spf.petscInfo(self.logger, 'Load finish')
         return True
 
     def print_self_info(self):
@@ -596,22 +614,18 @@ class _baseProblem(baseClass.baseObj):
                       (self.update_fun, self.update_order, self.max_it))
         spf.petscInfo(self.logger, '  t0=%f, t1=%f, dt=%f' %
                       (self.t0, self.t1, self.eval_dt))
-        spf.petscInfo(self.logger, '  save log file to %s ' % self.log_filename)
-        spf.petscInfo(self.logger, '  save pickle file to %s ' % self.pickle_filename)
+        spf.petscInfo(self.logger, '  save log file to %s ' % self.log_name)
+        spf.petscInfo(self.logger, '  save pickle file to %s ' % self.pickle_name)
         self.print_self_info()
 
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.print_info()
         self.relationHandle.print_info()
-
-        spf.petscInfo(self.logger, ' ')
-        spf.petscInfo(self.logger, 'Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        self._update_start_time = datetime.now()
         return True
 
-    def dbg_t_hist(self, t_hist):
-        self._t_hist = t_hist
-        return True
+    # def dbg_t_hist(self, t_hist):
+    #     self._t_hist = t_hist
+    #     return True
 
 
 class _base2DProblem(_baseProblem):
@@ -635,9 +649,9 @@ class _base2DProblem(_baseProblem):
         assert isinstance(obj, particleClass.particle2D), err_msg
         return True
 
-    def update_prepare(self):
+    def update_prepare(self, showInfo=True):
         self.Phiall = np.vstack([objj.phi for objj in self.obj_list])
-        super().update_prepare()
+        super().update_prepare(showInfo=showInfo)
         return True
 
     def update_position(self, **kwargs):
@@ -777,5 +791,37 @@ class behaviorFiniteDipole2DProblem(behavior2DProblem, finiteDipole2DProblem):
 
 
 class actLimFiniteDipole2DProblem(behavior2DProblem, limFiniteDipole2DProblem):
+    def _nothing(self):
+        pass
+
+
+class _periodic2DProblem(_base2DProblem):
+    def __init__(self, name='...', Xrange=1, **kwargs):
+        super().__init__(name, **kwargs)
+        self._Xrange = Xrange
+
+    @property
+    def Xrange(self):
+        return self._Xrange
+
+    def _postfunction(self, ts):
+        super()._postfunction(ts)
+        Y = ts.getSolution()
+        X_all, phi_all = self.Y2Xphi(Y)
+        # print('dbg')
+        # t1 = X_all.reshape((-1, 2)).ravel()
+        # # print(X_all)
+        # # print(t1)
+        # print(id(X_all), id(t1), np.allclose(X_all, t1))
+        X_all = spf.warpMinMax(X_all, -self.Xrange / 2, self.Xrange / 2)
+        self.Xall, self.Phiall = X_all.reshape((-1, 2)), phi_all
+        self.update_position()
+        Y[:] = np.hstack((self.Xall.ravel(), self.Phiall))
+        Y.assemble()
+        return True
+
+
+class actPeriodic2DProblem(_periodic2DProblem, behavior2DProblem):
+    # class actPeriodic2DProblem(behavior2DProblem):
     def _nothing(self):
         pass

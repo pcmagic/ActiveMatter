@@ -1,51 +1,50 @@
 import numpy as np
 from tqdm import tqdm
+
+tqdm_notebook = tqdm  # for dbg
 # from act_act_src import baseClass
 from act_src import particleClass
 from act_src import interactionClass
 from act_src import problemClass
 from act_src import relationClass
+# from collectiveFish.do_calculate import calculate_fun_dict, prbHandle_dict, rltHandle_dict, ptcHandle_dict
+from collectiveFish.do_calculate import *
 
-test_n = 5
-overlap_epsilon = 1e-5
-u, length = 1, 1
-attract, align = 1, 1
-tmax = 15
+update_fun, update_order, eval_dt = '4', (0, 0), 0.01
+nptc, calculate_fun = 10, 'do_phaseLagPeriodic2D'
+ini_t, max_t, Xlim = np.float64(0), eval_dt * 2, 1
+seed = 1
 
-prb1 = problemClass.finiteDipole2DProblem(name='testFiniteDipole2D')
-prb1.attract = attract
-prb1.align = align
-prb1.tqdm_fun = tqdm
+problem_kwargs = {
+    'ini_t':           ini_t,
+    'max_t':           max_t,
+    'update_fun':      update_fun,
+    'update_order':    update_order,
+    'eval_dt':         eval_dt,
+    'calculate_fun':   calculate_fun_dict[calculate_fun],
+    'prbHandle':       prbHandle_dict[calculate_fun],
+    'rltHandle':       rltHandle_dict[calculate_fun],
+    'ptcHandle':       ptcHandle_dict[calculate_fun],
+    'fileHandle':      'try_phaseLag2D',
+    'save_every':      np.int64(1),
+    'nptc':            np.int64(nptc),
+    'overlap_epsilon': np.float64(1e-100),
+    'un':              np.float64(1),
+    'ln':              np.float64(-1),
+    'Xlim':            np.float64(Xlim),
+    'Xrange':          np.float64(Xlim),
+    'attract':         np.float64(0),
+    'align':           np.float64(1),
+    'viewRange':       np.float64(1),
+    'localRange':      np.float64(0.3),
+    'phaseLag2D':      np.float64(1.54 / np.pi),
+    'seed':            seed,
+    'tqdm_fun':        tqdm_notebook,
+}
 
-np.random.seed(0)
-for _ in range(test_n):
-    tptc = particleClass.finiteDipole2D(length=length, name='ptc2D')
-    tptc.P1 = np.random.sample((2,))
-    tptc.X = np.random.uniform(-10, 10, (2,))
-    tptc.u = u
-    prb1.add_obj(tptc)
-    # print(tptc.P1, tptc.phi / np.pi, tptc.X)
+doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
+prb1 = doPrb1.do_calculate(ini_t=ini_t, max_t=max_t, eval_dt=eval_dt, )
+do_hdf5(prb1, **problem_kwargs)
+prb1.hdf5_load(showInfo=False)
 
-rlt1 = relationClass.VoronoiBaseRelation2D(name='relation1')
-rlt1.overlap_epsilon = overlap_epsilon
-prb1.relationHandle = rlt1
-
-act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
-prb1.add_act(act1)
-act2 = interactionClass.FiniteDipole2D(name='FiniteDipole2D')
-prb1.add_act(act2)
-act3 = interactionClass.Attract2D(name='Attract2D')
-prb1.add_act(act3)
-act4 = interactionClass.Align2D(name='Align2D')
-prb1.add_act(act4)
-
-prb1.update_step()
-# problem.relationHandle.dbg_showVoronoi()
-prb1.update_self(t1=tmax)
-#
-# from act_codeStore import support_fun_animation as spanm
-# from IPython import display
-# anim = spanm.make2D_X_video(problem.t_hist, problem.obj_list)
-# video = anim.to_html5_video()
-# html = display.HTML(video)
-# display.display(html)
+print(11111111111111111111)

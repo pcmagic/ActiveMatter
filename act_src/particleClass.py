@@ -20,7 +20,6 @@ class _baseParticle(baseClass.baseObj):
         super().__init__(name, **kwargs)
         self._index = -1  # object index
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
-        self._father = None
         self._u = 0  # particle velocity
         self._X = np.nan  # particle center position
         self._U = np.nan  # particle translational velocity in global coordinate
@@ -196,9 +195,15 @@ class _baseParticle(baseClass.baseObj):
         return True
 
     def do_store_data(self, **kwargs):
-        self.X_hist.append(self.X.copy())
-        self.U_hist.append(self.U.copy())
-        self.W_hist.append(self.W.copy())
+        if self.rank0:
+            self.X_hist.append(self.X.copy())
+            self.U_hist.append(self.U.copy())
+            self.W_hist.append(self.W.copy())
+        return True
+
+    def destroy_self(self, **kwargs):
+        super().destroy_self(**kwargs)
+        self.neighbor_list.clear()
         return True
 
     def empty_hist(self, **kwargs):
@@ -240,8 +245,9 @@ class _baseParticle(baseClass.baseObj):
         return True
 
     def update_finish(self):
-        self._X_hist = np.vstack(self.X_hist)
-        self._U_hist = np.vstack(self.U_hist)
+        if self.rank0:
+            self._X_hist = np.vstack(self.X_hist)
+            self._U_hist = np.vstack(self.U_hist)
         return True
 
 
@@ -323,7 +329,8 @@ class particle2D(_baseParticle):
 
     def do_store_data(self, **kwargs):
         super().do_store_data()
-        self.phi_hist.append(self.phi)  # phi is a float, no necessary to copy.
+        if self.rank0:
+            self.phi_hist.append(self.phi)  # phi is a float, no necessary to copy.
         return True
 
     def empty_hist(self, **kwargs):
@@ -349,7 +356,7 @@ class particle2D(_baseParticle):
         assert isinstance(self.father, problemClass._base2DProblem), err_msg % 'father'
         assert self.X.shape == (2,), err_msg % 'X'
         assert self.U.shape == (2,), err_msg % 'U'
-        assert self.W.shape == (1,), err_msg % 'W'
+        assert self.W.size == 1, err_msg % 'W'
         for obji in self.neighbor_list:
             assert isinstance(obji, particle2D), err_msg % 'neighbor_list'
         assert np.isfinite(self.P1).all(), err_msg % 'P1'
@@ -360,8 +367,9 @@ class particle2D(_baseParticle):
 
     def update_finish(self):
         super().update_finish()
-        self._W_hist = np.hstack(self.W_hist)
-        self._phi_hist = np.hstack(self.phi_hist)
+        if self.rank0:
+            self._W_hist = np.hstack(self.W_hist)
+            self._phi_hist = np.hstack(self.phi_hist)
         return True
 
 

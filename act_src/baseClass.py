@@ -23,6 +23,9 @@ class baseObj:
         # self._type = '...'
         self._type = type(self).__name__
         self._father = None
+        self._comm = PETSc.COMM_WORLD
+        self._rank = self.comm.tompi4py().Get_rank()
+        self._rank0 = self.rank == 0
 
     def __repr__(self):
         return self._type
@@ -54,6 +57,18 @@ class baseObj:
     def father(self, father):
         self._father = father
 
+    @property
+    def comm(self):
+        return self._comm
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def rank0(self):
+        return self._rank0
+
     def print_info(self):
         # OptDB = PETSc.Options()
         spf.petscInfo(self.father.logger, ' ')
@@ -71,7 +86,10 @@ class baseObj:
         return vec
 
     def destroy_self(self, **kwargs):
-        pass
+        self._father = None
+        self._comm = None
+        self._rank = None
+        return True
 
     def empty_hist(self, **kwargs):
         pass

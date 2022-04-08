@@ -33,7 +33,10 @@ calculate_fun_dict = {
     'do_dbgBokaiZhang':            spc.do_dbgBokaiZhang,
     'do_actLimFiniteDipole2D':     spc.do_actLimFiniteDipole2D,
     'do_actLight2D':               spc.do_actLight2D,
+    'do_phaseLag2D':               spc.do_phaseLag2D,
+    'do_phaseLagPeriodic2D':       spc.do_phaseLagPeriodic2D,
 }
+
 prbHandle_dict = {
     'do_FiniteDipole2D':           problemClass.finiteDipole2DProblem,
     'do_LimFiniteDipole2D':        problemClass.limFiniteDipole2DProblem,
@@ -43,7 +46,10 @@ prbHandle_dict = {
     'do_dbgBokaiZhang':            problemClass.behavior2DProblem,
     'do_actLimFiniteDipole2D':     problemClass.actLimFiniteDipole2DProblem,
     'do_actLight2D':               problemClass.actLimFiniteDipole2DProblem,
+    'do_phaseLag2D':               problemClass.behavior2DProblem,
+    'do_phaseLagPeriodic2D':       problemClass.actPeriodic2DProblem,
 }
+
 rltHandle_dict = {
     'do_FiniteDipole2D':           relationClass.finiteRelation2D,
     'do_LimFiniteDipole2D':        relationClass.limFiniteRelation2D,
@@ -53,7 +59,10 @@ rltHandle_dict = {
     'do_dbgBokaiZhang':            relationClass.VoronoiBaseRelation2D,
     'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
     'do_actLight2D':               relationClass.AllBaseRelation2D,
+    'do_phaseLag2D':               relationClass.localBaseRelation2D,
+    'do_phaseLagPeriodic2D':       relationClass.localBaseRelation2D,
 }
+
 ptcHandle_dict = {
     'do_FiniteDipole2D':           particleClass.finiteDipole2D,
     'do_LimFiniteDipole2D':        particleClass.limFiniteDipole2D,
@@ -63,6 +72,8 @@ ptcHandle_dict = {
     'do_dbgBokaiZhang':            particleClass.particle2D,
     'do_actLimFiniteDipole2D':     particleClass.limFiniteDipole2D,
     'do_actLight2D':               particleClass.limFiniteDipole2D,
+    'do_phaseLag2D':               particleClass.particle2D,
+    'do_phaseLagPeriodic2D':       particleClass.particle2D,
 }
 
 
@@ -84,13 +95,20 @@ def get_problem_kwargs(**main_kwargs):
     overlap_epsilon = np.float64(OptDB.getReal('overlap_epsilon', 0))
     un = np.float64(OptDB.getReal('un', 1))
     ln = np.float64(OptDB.getReal('ln', 1))
-    Xlim = np.float64(OptDB.getReal('Xlim', 3))
+    Xlim = np.float64(OptDB.getReal('Xlim', 1))
     attract = np.float64(OptDB.getReal('attract', 0))
     align = np.float64(OptDB.getReal('align', 0))
-    viewRange = np.float64(OptDB.getReal('viewRange', np.pi))
+    viewRange = np.float64(OptDB.getReal('viewRange', 1)) * np.pi
     rot_noise = np.float64(OptDB.getReal('rot_noise', 0))
     trs_noise = np.float64(OptDB.getReal('trs_noise', 0))
     seed0 = OptDB.getInt('seed0', -1)
+
+    # chimera
+    phaseLag2D = np.float64(OptDB.getReal('phaseLag2D', 0)) * np.pi
+    localRange = np.float64(OptDB.getReal('localRange', 0))
+
+    # periodic boundary condition
+    Xrange = np.float64(OptDB.getReal('Xrange', Xlim))
 
     # err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
     # assert nptc > 4, err_msg
@@ -114,9 +132,12 @@ def get_problem_kwargs(**main_kwargs):
         'un':              un,
         'ln':              ln,
         'Xlim':            Xlim,
+        'Xrange':          Xrange,
         'attract':         attract,
         'align':           align,
         'viewRange':       viewRange,
+        'phaseLag2D':      phaseLag2D,
+        'localRange':      localRange,
         'rot_noise':       rot_noise,
         'trs_noise':       trs_noise,
         'seed':            seed,
@@ -142,7 +163,7 @@ def do_hdf5(prb1: problemClass._baseProblem, **kwargs):
     return True
 
 
-def export_figure(prb1: problemClass._baseProblem, **kwargs):
+def export_trajectory2D(prb1: problemClass._baseProblem, **kwargs):
     OptDB = PETSc.Options()
     comm = PETSc.COMM_WORLD.tompi4py()
     rank = comm.Get_rank()
@@ -155,16 +176,38 @@ def export_figure(prb1: problemClass._baseProblem, **kwargs):
     save_sub_fig = OptDB.getBool('save_sub_fig', True)
 
     if rank == 0:
+        if save_fig:
+            filename = '%s/fig_%s.png' % (prb1.name, prb1.name)
+            sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
+                             plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct,
+                             plt_full_obj=True, plt_full_time=False, )
+        #
         if save_sub_fig:
             t1 = np.linspace(prb1.t0, prb1.t1, 11)
             for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
-                filename = '%s/fig_%d.png' % (prb1.name, i0)
+                filename = '%s/fig_%s_%d.png' % (prb1.name, prb1.name, i0)
                 sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-                                 plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct)
-        if save_fig:
-            filename = '%s/fig.png' % prb1.name
-            sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-                             plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct)
+                                 plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct,
+                                 plt_full_obj=True, plt_full_time=False, )
+    return True
+
+
+def export_avrPhaseVelocity(prb1: problemClass._baseProblem, tavr=10, **kwargs):
+    OptDB = PETSc.Options()
+    comm = PETSc.COMM_WORLD.tompi4py()
+    rank = comm.Get_rank()
+
+    # setup
+    figsize = np.array((16, 9)) * 0.3
+    dpi = 300
+    resampling_fct, interp1d_kind = 1, 'linear'
+    export_avrPhaseVelocity = OptDB.getBool('export_avrPhaseVelocity', True)
+
+    if rank == 0 and export_avrPhaseVelocity:
+        filename = '%s/avrW_%s.png' % (prb1.name, prb1.name)
+        sps.save_fig_fun(filename, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi,
+                         plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct,
+                         cmap=plt.get_cmap('bwr'), tavr=tavr)
     return True
 
 
@@ -190,8 +233,9 @@ def main_fun(**main_kwargs):
     prb1.hdf5_load()
     # import time
     # time.sleep(2)
-    export_figure(prb1)
-
+    export_trajectory2D(prb1)
+    export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
+    # export_avrPhaseVelocity(prb1, tavr=1)
     return True
 
 

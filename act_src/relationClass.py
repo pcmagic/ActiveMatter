@@ -48,13 +48,13 @@ class _baseRelation(baseClass.baseObj):
 
 
 class _baseRelation2D(_baseRelation):
-    def __init__(self, name='...', **kwargs):
+    def __init__(self, name='...', overlap_epsilon=0, **kwargs):
         super().__init__(name, **kwargs)
         self._theta_ij = np.nan  # angle between ei and (rj - ri)
         self._e_rho_ij = np.nan  # unite direction (ri - rj) / |ri - rj|
         self._rho_ij = np.nan  # inter-swimmer distance |ri - rj|
         self._phi_rho_ij = np.nan  # angle of e_rho_ij, np.arctan2(e_rho_ij[1], e_rho_ij[0])
-        self._overlap_epsilon = 0
+        self._overlap_epsilon = overlap_epsilon
 
     @property
     def theta_ij(self):
@@ -106,24 +106,24 @@ class _baseRelation2D(_baseRelation):
         phi_ij = np.arccos(np.dot(ei, ej) / (np.linalg.norm(ei) * np.linalg.norm(ej)))
         return theta_ij, theta_ji, phi_ij
 
-    def cal_theta_rho(self):
-        prb = self.father  # type: problemClass._baseProblem
-        theta_ij, e_rho_ij, phi_rho_ij, rho_ij = [], [], [], []
-        obji: particleClass.particle2D
-        for i0, obji in enumerate(prb.obj_list):
-            tPij = prb.Xall - obji.X
-            # tPji = -tPij
-            trhoij = np.linalg.norm(tPij, axis=-1)
-            tphi_rhoij = np.arctan2(tPij[:, 1], tPij[:, 0])
-            e_rho_ij.append(tPij)
-            rho_ij.append(trhoij)
-            phi_rho_ij.append(tphi_rhoij)
-            theta_ij.append(obji.phi - tphi_rhoij)
-        self._e_rho_ij = np.array(e_rho_ij)
-        self._phi_rho_ij = np.vstack(phi_rho_ij)
-        self._rho_ij = np.vstack(rho_ij)
-        self._theta_ij = np.vstack(theta_ij)
-        return True
+    # def cal_theta_rho(self):
+    #     prb = self.father  # type: problemClass._baseProblem
+    #     theta_ij, e_rho_ij, phi_rho_ij, rho_ij = [], [], [], []
+    #     obji: particleClass.particle2D
+    #     for i0, obji in enumerate(prb.obj_list):
+    #         tPij = prb.Xall - obji.X
+    #         # tPji = -tPij
+    #         trhoij = np.linalg.norm(tPij, axis=-1)
+    #         tphi_rhoij = np.arctan2(tPij[:, 1], tPij[:, 0])
+    #         e_rho_ij.append(tPij)
+    #         rho_ij.append(trhoij)
+    #         phi_rho_ij.append(tphi_rhoij)
+    #         theta_ij.append(obji.phi - tphi_rhoij)
+    #     self._e_rho_ij = np.array(e_rho_ij)
+    #     self._phi_rho_ij = np.vstack(phi_rho_ij)
+    #     self._rho_ij = np.vstack(rho_ij)
+    #     self._theta_ij = np.vstack(theta_ij)
+    #     return True
 
     # def cal_theta_rho(self):
     #     prb = self.father  # type: problemClass.baseProblem
@@ -157,43 +157,16 @@ class _baseRelation2D(_baseRelation):
     #                 neighbor_list.append_noCheck(objj)
     #     return True
 
-    def update_relation(self, **kwargs):
-        pass
-
-    def update_neighbor(self, **kwargs):
-        pass
-
-    def print_info(self):
-        baseClass.baseObj.print_info(self)
-        spf.petscInfo(self.father.logger, '  overlap_epsilon=%e' % self.overlap_epsilon)
-        return True
-
-
-class finiteRelation2D(_baseRelation2D):
     def cal_rho(self):
         prb = self.father  # type: problemClass._baseProblem
-        rho_ij = np.zeros((prb.n_obj, prb.n_obj)),
+        rho_ij = np.zeros((prb.n_obj, prb.n_obj))
+        obji: particleClass.particle2D
         for i0, obji in enumerate(prb.obj_list):
             tPij = prb.Xall - obji.X
             trhoij = np.linalg.norm(tPij, axis=-1)
             rho_ij[i0, :] = trhoij
         self._rho_ij = rho_ij
         return True
-
-    def update_relation(self, **kwargs):
-        self.cal_rho()
-        return True
-
-
-class limFiniteRelation2D(finiteRelation2D):
-    def _noting(self):
-        pass
-
-
-class VoronoiBaseRelation2D(_baseRelation2D):
-    def __init__(self, name='...', **kwargs):
-        super().__init__(name=name, **kwargs)
-        self._fun_update_neighbor = None
 
     def cal_theta_rho(self):
         prb = self.father  # type: problemClass._baseProblem
@@ -209,18 +182,46 @@ class VoronoiBaseRelation2D(_baseRelation2D):
         self._theta_ij = theta_ij
         return True
 
-    def update_prepare(self):
-        if self.father.n_obj > 4:
-            self._fun_update_neighbor = self.update_neighbor_voronoi
-        else:
-            self._fun_update_neighbor = self.update_neighbor_all
+    def update_relation(self, **kwargs):
+        pass
+
+    def update_neighbor(self, **kwargs):
+        pass
+
+    def print_info(self):
+        baseClass.baseObj.print_info(self)
+        # super().print_info()
+        spf.petscInfo(self.father.logger, '  overlap_epsilon=%e' % self.overlap_epsilon)
         return True
 
+
+class finiteRelation2D(_baseRelation2D):
+    def update_relation(self, **kwargs):
+        self.cal_rho()
+        return True
+
+
+class limFiniteRelation2D(finiteRelation2D):
+    def _noting(self):
+        pass
+
+
+class AllBaseRelation2D(_baseRelation2D):
     def update_relation(self, **kwargs):
         self.cal_theta_rho()
         return True
 
-    def update_neighbor_voronoi(self, **kwargs):
+    def update_neighbor(self, **kwargs):
+        prb = self.father  # type: problemClass._baseProblem
+        for obji in prb.obj_list:
+            obji.neighbor_list.clear()
+            for objj in prb.obj_list:
+                obji.neighbor_list.append_noCheck(objj)
+        return True
+
+
+class _VoronoiBaseRelation2D(AllBaseRelation2D):
+    def update_neighbor(self, **kwargs):
         prb = self.father  # type: problemClass._baseProblem
         X_list = prb.Xall
         vor = Voronoi(X_list)
@@ -247,17 +248,6 @@ class VoronoiBaseRelation2D(_baseRelation2D):
                     obji.neighbor_list.append_noCheck(prb.obj_list[t1[0]])
         return True
 
-    def update_neighbor_all(self, **kwargs):
-        prb = self.father  # type: problemClass._baseProblem
-        for obji in prb.obj_list:
-            obji.neighbor_list.clear()
-            for objj in prb.obj_list:
-                obji.neighbor_list.append_noCheck(objj)
-        return True
-
-    def update_neighbor(self, **kwargs):
-        return self._fun_update_neighbor(**kwargs)
-
     def dbg_showVoronoi(self, **kwargs):
         # from matplotlib import pyplot as plt
         prb = self.father  # type: problemClass._baseProblem
@@ -283,7 +273,59 @@ class VoronoiBaseRelation2D(_baseRelation2D):
         return True
 
 
-class AllBaseRelation2D(VoronoiBaseRelation2D):
-    def update_prepare(self):
-        self._fun_update_neighbor = self.update_neighbor_all
+class VoronoiBaseRelation2D(_VoronoiBaseRelation2D):
+    def __init__(self, name='...', overlap_epsilon=0, **kwargs):
+        super().__init__(name, overlap_epsilon, **kwargs)
+        self._fun_update_neighbor = None
+
+    def update_prepare(self, **kwargs):
+        if self.father.n_obj > 4:
+            self._fun_update_neighbor = _VoronoiBaseRelation2D.update_neighbor
+        else:
+            self._fun_update_neighbor = AllBaseRelation2D.update_neighbor
         return True
+
+    def update_neighbor(self, **kwargs):
+        return self._fun_update_neighbor(self, **kwargs)
+
+    def print_info(self):
+        super().print_info()
+        if self.father.n_obj > 4:
+            spf.petscInfo(self.father.logger, '  n_obj > 4, VoronoiBaseRelation2D')
+        else:
+            spf.petscInfo(self.father.logger, '  n_obj <= 4, AllBaseRelation2D')
+        return True
+
+
+class localBaseRelation2D(_baseRelation2D):
+    def __init__(self, name='...', localRange=0, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self._localRange = localRange
+
+    @property
+    def localRange(self):
+        return self._localRange
+
+    @localRange.setter
+    def localRange(self, localRange):
+        assert localRange > 0
+        self._localRange = localRange
+
+    def update_relation(self, **kwargs):
+        self.cal_rho()
+        return True
+
+    def update_neighbor(self, **kwargs):
+        prb = self.father  # type: problemClass._baseProblem
+        for obji, trhoij in zip(prb.obj_list, self.rho_ij):
+            obji.neighbor_list.clear()
+            for objj in prb.obj_list[trhoij < self.localRange]:
+                obji.neighbor_list.append_noCheck(objj)
+        return True
+
+    def print_info(self):
+        super().print_info()
+        spf.petscInfo(self.father.logger, '  localRange=%e' % self.localRange)
+        return True
+
+# class periodicLocalRelation2D(localBaseRelation2D):

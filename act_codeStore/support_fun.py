@@ -400,6 +400,64 @@ def write_pbs_head_JiUbuntu(fpbs, job_name, nodes=1):
     return True
 
 
+def write_slurm_head_v5_192(fpbs, job_name, nodes=1):
+    fpbs.write('#! /bin/bash\n')
+    fpbs.write('#SBATCH -p v5_192\n')
+    fpbs.write('#SBATCH -N %d\n' % nodes)
+    fpbs.write('#SBATCH -n 48\n')
+    fpbs.write('#SBATCH -t 4321\n')
+    fpbs.write('#SBATCH -o log.%s\n' % job_name)
+    fpbs.write('#SBATCH -e err.%s\n' % job_name)
+    fpbs.write('#SBATCH -J %s\n' % job_name)
+    fpbs.write('\n')
+    # fpbs.write('srun hostname -s | sort -n >slurm.hosts\n')
+    fpbs.write('scontrol show hostnames $SLURM_JOB_NODELIST > nodefile\n')
+    fpbs.write('\n')
+    fpbs.write('source ~/.bashrc\n')
+    fpbs.write('source /public1/home/scfa1057/fishSchool/pyPkg/soft/env.sh\n')
+    fpbs.write('source /public1/home/scfa1057/fishSchool/pyPkg/new/env_openmpi.sh\n')
+    fpbs.write('\n')
+    # fpbs.write("THEPATH=$(scontrol show job $SLURM_JOBID | gawk -F= '/Command=/{print $2}')\n")
+    # fpbs.write('SH_PATH=$(dirname "${THEPATH}")\n')
+    # fpbs.write('echo $SH_PATH\n')
+    # fpbs.write('cd $SH_PATH\n')
+    fpbs.write('cd $SLURM_SUBMIT_DIR\n')
+    fpbs.write('rm -rf std_output\n')
+    fpbs.write('mkdir std_output\n')
+    fpbs.write('sleep 1\n')
+    fpbs.write('\n')
+    return True
+
+
+# def write_pbs_head_v5_192(fpbs, job_name, nodes=1):
+#     fpbs.write('#! /bin/bash\n')
+#     fpbs.write('#SBATCH -p v5_192\n')
+#     fpbs.write('#SBATCH -N %d\n' % nodes)
+#     fpbs.write('#SBATCH -n 48\n')
+#     fpbs.write('#SBATCH -t 4321\n')
+#     fpbs.write('#SBATCH -o log.%s\n' % job_name)
+#     fpbs.write('#SBATCH -e err.%s\n' % job_name)
+#     fpbs.write('#SBATCH -J %s\n' % job_name)
+#     fpbs.write('\n')
+#     fpbs.write('srun hostname -s | sort -n >slurm.hosts\n')
+#     fpbs.write('scontrol show hostnames $SLURM_JOB_NODELIST > nodefile\n')
+#     fpbs.write('\n')
+#     fpbs.write('source ~/.bashrc\n')
+#     fpbs.write('source /public1/home/scfa1057/fishSchool/pyPkg/soft/env.sh\n')
+#     fpbs.write('source /public1/home/scfa1057/fishSchool/pyPkg/new/env_openmpi.sh\n')
+#     fpbs.write('\n')
+#     # fpbs.write("THEPATH=$(scontrol show job $SLURM_JOBID | gawk -F= '/Command=/{print $2}')\n")
+#     # fpbs.write('SH_PATH=$(dirname "${THEPATH}")\n')
+#     # fpbs.write('echo $SH_PATH\n')
+#     # fpbs.write('cd $SH_PATH\n')
+#     fpbs.write('cd $SLURM_SUBMIT_DIR\n')
+#     fpbs.write('rm -rf std_output\n')
+#     fpbs.write('mkdir std_output\n')
+#     fpbs.write('sleep 1\n')
+#     fpbs.write('\n')
+#     return True
+
+
 def _write_main_run_top(frun, main_hostname='ln0'):
     frun.write('t_dir=$PWD \n')
     frun.write('bash_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" \n\n')
@@ -420,22 +478,29 @@ def write_main_run(write_pbs_head, job_dir, ncase):
     print('write parallel pbs file to %s' % tname)
     with open(tname, 'w') as fpbs:
         write_pbs_head(fpbs, job_dir, nodes=ncase)
-        fpbs.write('seq 0 %d | parallel -j 1 -u --sshloginfile $PBS_NODEFILE \\\n' % (ncase - 1))
+        fpbs.write('seq 0 %d | parallel -j 1 --ungroup --sshloginfile $PBS_NODEFILE \\\n' % (ncase - 1))
         fpbs.write('\"cd $PWD;echo $PWD;bash myscript.csh {}\"')
     return True
 
 
 def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
                              write_pbs_head000=write_pbs_head, n_job_pbs=None,
-                             random_order=False, ):
+                             random_order=False, remote_path=None):
     def _parallel_pbs_ln0(n_use_comm, njob_node, csh_name):
-        t2 = 'seq 0 %d | parallel -j %d -u ' % (n_use_comm - 1, njob_node)
+        t2 = 'seq 0 %d | parallel -j %d --ungroup ' % (n_use_comm - 1, njob_node)
         t2 = t2 + ' --sshloginfile $PBS_NODEFILE --sshdelay 0.1 '
         t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n\n ' % csh_name
         return t2
 
+    def _parallel_slurm_v5_192(n_use_comm, njob_node, csh_name):
+        t2 = 'seq 0 %d | parallel -j %d --ungroup ' % (n_use_comm - 1, njob_node)
+        t2 = t2 + ' --sshloginfile nodefile --sshdelay 0.1 '
+        # t2 = t2 + ' --sshdelay 0.1 '
+        t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n\n ' % csh_name
+        return t2
+
     def _parallel_pbs_newturb(n_use_comm, njob_node, csh_name):
-        t2 = 'seq 0 %d | parallel -j %d -u ' % (n_use_comm - 1, njob_node)
+        t2 = 'seq 0 %d | parallel -j %d --ungroup ' % (n_use_comm - 1, njob_node)
         t2 = t2 + ' --sshdelay 0.1 '
         t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n\n ' % csh_name
         return t2
@@ -463,7 +528,7 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
     t_name0 = os.path.join(t_path, 'comm_list.sh')
     with open(t_name0, 'w') as fcomm:
         for i0, ts, f in zip(range(n_case), comm_list, txt_list):
-            fcomm.write('%s > %s.txt 2> %s.err \n' % (ts, f, f))
+            fcomm.write('%s > std_output/%s.log 2> std_output/%s.err \n' % (ts, f, f))
             fcomm.write('echo \'%d / %d, %s start.\'  \n\n' % (i0 + 1, n_case, f))
 
     assert callable(write_pbs_head000)
@@ -502,8 +567,14 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
         _parallel_pbs_use = _parallel_pbs_newturb
         run_fun = 'cd $bash_dir \nnohup bash %s &\ncd $t_dir\n\n'
         assert np.isclose(use_node, 1)
+    elif write_pbs_head000 is write_slurm_head_v5_192:
+        main_hostname = 'ln162.para.bscc'
+        _parallel_pbs_use = _parallel_slurm_v5_192
+        # run_fun = 'cd $bash_dir \nsbatch %s &\ncd $t_dir\n\n'
+        run_fun = 'sbatch %s \n'
     else:
         raise ValueError('wrong write_pbs_head000')
+
     # generate .pbs file and .csh file
     t_name0 = os.path.join(t_path, 'main_run.sh')
     with open(t_name0, 'w') as frun:
@@ -537,12 +608,13 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
                     t2 = t2 + '"%s" ' % t3
                 t2 = t2 + ') \n\n'
                 fcsh.write(t2)
-                fcsh.write('echo ${comm_list[$1]} \'>\' ${txt_list[$1]}.txt'
-                           ' \'2>\' ${txt_list[$1]}.err \n')
+                fcsh.write('echo ${comm_list[$1]} \'>\' std_output/${txt_list[$1]}.log'
+                           ' \'2>\' std_output/${txt_list[$1]}.err \n')
                 fcsh.write('echo $(expr $1 + 1) / %d, ${txt_list[$1]} start.  \n' % n_case)
                 fcsh.write('echo \n')
                 fcsh.write('if [ ${2:-false} = true ]; then \n')
-                fcsh.write('    ${comm_list[$1]} > ${txt_list[$1]}.txt 2> ${txt_list[$1]}.err \n')
+                fcsh.write('    ${comm_list[$1]} > std_output/${txt_list[$1]}.log '
+                           '2> std_output/${txt_list[$1]}.err \n')
                 fcsh.write('fi \n\n')
             frun.write(run_fun % pbs_name)
         frun.write('\n')
@@ -552,6 +624,30 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
         print(' --->>random order mode is ON. ')
     print('Command of first case is:')
     print(comm_list[0])
+
+    # generate upload and download scripts.
+    if remote_path is not None:
+        if write_pbs_head000 is write_slurm_head_v5_192:
+            scp_comm = 'papp_cloud scp -i ~/.ssh/scfa1057.id'
+            # rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -avzh --progress'
+            rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -z'
+            ssh_info = 'scfa1057@nc-e'
+        else:
+            raise ValueError('wrong write_pbs_head000 for remote_path')
+        remote_path = os.path.join(remote_path, job_dir)
+        upsh = os.path.join(t_path, 'upload.sh')
+        with open(upsh, 'w') as fup:
+            fup.write('%s ./ %s:%s\n' % (scp_comm, ssh_info, remote_path))
+        dnsh = os.path.join(t_path, 'download.sh')
+        with open(dnsh, 'w') as fup:
+            fup.write('RC=1\n')
+            fup.write('while [[ $RC -ne 0 ]]\n')
+            fup.write('do\n')
+            fup.write('   %s %s:%s/ ./\n'% (rsync_comm, ssh_info, remote_path))
+            fup.write('   RC=$?\n')
+            fup.write('   sleep 1\n')
+            fup.write('done\n')
+            fup.write('\n')
     return True
 
 
@@ -570,7 +666,7 @@ def write_myscript(job_name_list, job_dir):
 
 
 def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
-                         local_hostname='JiUbuntu'):
+                         txt_list=None, local_hostname='JiUbuntu'):
     PWD = os.getcwd()
     comm_list = np.array(comm_list)
     n_comm = comm_list.size
@@ -579,6 +675,12 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
     csh_name = 'csh.main_run'
 
     t_path = os.path.join(PWD, job_dir)
+    # # dbg
+    # print(job_dir)
+    # print(t_path)
+    # print(PWD)
+    # print(os.path.join(PWD, t_path))
+
     print()
     if not os.path.exists(t_path):
         os.makedirs(t_path)
@@ -586,10 +688,15 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
     else:
         print('exist folder %s' % t_path)
 
+    if txt_list is None:
+        txt_list = ['case_%05d' % i0 for i0 in np.arange(n_comm)]
+    txt_list = np.array(txt_list)
+
     if random_order:
         tidx = np.arange(n_comm)
         np.random.shuffle(tidx)
         comm_list = comm_list[tidx]
+        txt_list = txt_list[tidx]
 
     # generate comm_list.sh
     t_name0 = os.path.join(t_path, 'comm_list.sh')
@@ -604,7 +711,7 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
         fpbs.write('#!/bin/sh\n')
         fpbs.write('# run the job locally. \n')
         fpbs.write('echo start job at $(date) \n')
-        t2 = 'seq 0 %d | parallel -j %d -u ' % (n_comm - 1, njob_node)
+        t2 = 'seq 0 %d | parallel -j %d --ungroup ' % (n_comm - 1, njob_node)
         t2 = t2 + ' --sshdelay 0.1 '
         t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n' % csh_name
         fpbs.write(t2)
@@ -616,8 +723,8 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
     with open(t_name, 'w') as fcsh:
         fcsh.write('#!/bin/csh -fe \n\n')
         t2 = 'comm_list=('
-        for t3 in comm_list:
-            t2 = t2 + '"%s" ' % t3
+        for ttxt, tcomm in zip(txt_list, comm_list):
+            t2 = t2 + '"%s 2>std_output/%s.stderr 1>std_output/%s.stdout" ' % (tcomm, ttxt, ttxt)
         t2 = t2 + ') \n\n'
         fcsh.write(t2)
         fcsh.write('echo ${comm_list[$1]} \n')
@@ -638,16 +745,17 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
         fsh.write('    echo This node is $HOSTNAME. \n')
         fsh.write('fi \n\n')
 
+        nohup_name = 'nohup_%s.out' % '$(date +"%Y%m%d_%H%M%S")'
         fsh.write('t_dir=$PWD \n')
         fsh.write('bash_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" '
                   '>/dev/null 2>&1 && pwd )" \n')
         fsh.write('echo Current path: \n')
         fsh.write('echo $bash_dir \n')
         fsh.write('cd $bash_dir \n')
-        nohup_name = 'nohup_%s.out' % '$(date +"%Y%m%d_%H%M%S")'
+        fsh.write('mkdir std_output \n')
         fsh.write('nohup bash %s > %s 2>&1 & \n' % (pbs_name, nohup_name))
         fsh.write('echo Try the command to see the output information. \n')
-        fsh.write('echo tail -f %s \n' % nohup_name)
+        fsh.write('echo tail -n 1000 -f %s \n' % nohup_name)
         fsh.write('cd $t_dir \n')
         fsh.write('\n')
 

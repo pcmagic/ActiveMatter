@@ -27,7 +27,7 @@ from matplotlib.ticker import Locator
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.proj3d import proj_transform
 from mpl_toolkits.mplot3d.axes3d import Axes3D
-from matplotlib.colors import Normalize, ListedColormap
+from matplotlib.colors import Normalize, ListedColormap, LogNorm
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, HPacker, VPacker
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
@@ -38,12 +38,12 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes  # , zoomed_inset_a
 # from matplotlib import colors as mcolors
 
 from act_codeStore import support_fun as spf
+from act_src import problemClass
+from act_src import particleClass
+
 # from act_codeStore.support_class import *
 # from act_act_src import baseClass
-# from act_src import particleClass
 # from act_src import interactionClass
-from act_src import problemClass
-
 # from act_src import relationClass
 
 PWD = os.getcwd()
@@ -603,6 +603,46 @@ def resampling_data(t, X, resampling_fct=2, t_use=None, interp1d_kind='quadratic
     return intp_fun1d(t_use)
 
 
+def get_increase_angle(ty1):
+    ty = ty1.copy()
+    for i0, dt in enumerate(np.diff(ty)):
+        if dt > np.pi:
+            ty[i0 + 1:] = ty[i0 + 1:] - 2 * np.pi
+        elif dt < -np.pi:
+            ty[i0 + 1:] = ty[i0 + 1:] + 2 * np.pi
+    return ty
+
+
+def get_continue_angle(tx, ty1, t_use=None):
+    if t_use is None:
+        t_use = np.linspace(tx.min(), tx.max(), 2 * tx.size)
+    if np.array(t_use).size == 1:
+        t_use = np.linspace(tx.min(), tx.max(), t_use * tx.size)
+
+    ty = get_increase_angle(ty1)
+    intp_fun1d = interpolate.interp1d(tx, ty, kind='quadratic', copy=False, axis=0,
+                                      bounds_error=True)
+    ty = intp_fun1d(t_use) % (2 * np.pi)
+    ty[ty > np.pi] = ty[ty > np.pi] - 2 * np.pi
+    return ty
+
+
+def separate_idx(ty, spt_fct=0.5):
+    # for periodic boundary condition, separate to small components to avoid the jump of the trajectory.
+    idx_list = []
+    idx_list.append(-1)  # first idx is 0, but later will plus 1.
+    for tyi in ty:
+        dtyi = np.diff(tyi)
+        tol = (tyi.max() - tyi.min()) * spt_fct
+        idx_list.append(np.argwhere(dtyi > tol).flatten())
+        idx_list.append(np.argwhere(dtyi < -tol).flatten())
+    idx_list.append(ty.shape[1] - 1)  # last idx is (size-1).
+    # print(idx_list)
+    t1 = np.unique(np.hstack(idx_list))
+    # print(t1)
+    return np.vstack((t1[:-1] + 1, t1[1:])).T
+
+
 def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=50, resampling_fct=2,
                    interp1d_kind='quadratic', tmin=-np.inf, tmax=np.inf, plt_range=None, t0_marker='s'):
     # percentage = 0
@@ -656,12 +696,14 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
     return anim
 
 
-def show_fig_fun(problem, fig_handle, *args, **kwargs):
+def show_fig_fun(problem, fig_handle, return_info=False, *args, **kwargs):
     comm = PETSc.COMM_WORLD.tompi4py()
     rank = comm.Get_rank()
+    t1 = True
     if rank == 0:
-        fig_handle(problem=problem, *args, **kwargs)
-    return True
+        fig, axi = fig_handle(problem=problem, *args, **kwargs)
+        t1 = fig, axi if return_info else True
+    return t1
 
 
 def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
@@ -675,21 +717,22 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
         err_msg = 'wrong file extension, support: %s' % filetype
         assert extension[1:] in filetype, err_msg
     filenameHandle, extension = os.path.splitext(filename)
-    if extension[1:] in ('png', 'pdf', 'svg'):
-        metadata = {
-            'Title':  filenameHandle,
-            'Author': 'Zhang Ji'
-        }
-    elif extension[1:] in ('eps', 'ps',):
-        metadata = {'Creator': 'Zhang Ji'}
-    else:
-        metadata = None
+    # if extension[1:] in ('png', 'pdf', 'svg'):
+    #     metadata = {
+    #         'Title':  filenameHandle,
+    #         'Author': 'Zhang Ji'
+    #     }
+    # elif extension[1:] in ('eps', 'ps',):
+    #     metadata = {'Creator': 'Zhang Ji'}
+    # else:
+    #     metadata = None
 
     if rank == 0:
         backend = matplotlib.get_backend()
         matplotlib.use('Agg')
         fig = fig_handle(problem=problem, *args, **kwargs)
-        fig.savefig(fname=filename, dpi=dpi, metadata=metadata)
+        # fig.savefig(fname=filename, dpi=dpi, metadata=metadata)
+        fig.savefig(fname=filename, dpi=dpi)
         plt.close(fig)
         matplotlib.use(backend)
 
@@ -699,15 +742,10 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
     return True
 
 
-def core_trajectory2D(problem: 'problemClass._base2DProblem', show_idx=None,
-                      figsize=np.array((50, 50)) * 5, dpi=100, plt_tmin=-np.inf, plt_tmax=np.inf,
-                      resampling_fct=None, interp1d_kind='quadratic',
-                      t0_marker='s', cmap=plt.get_cmap('brg'), plt_full_range=True):
+def _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx, plt_full_obj):
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     tidx = (problem.t_hist >= plt_tmin) * (problem.t_hist <= plt_tmax)
-    t_hist = problem.t_hist[tidx]
-    norm = plt.Normalize(0.0, 1.0)
     if show_idx is None:
         show_idx = np.arange(problem.n_obj)
     show_idx = np.array(show_idx)
@@ -715,41 +753,203 @@ def core_trajectory2D(problem: 'problemClass._base2DProblem', show_idx=None,
     assert show_idx.max() < problem.n_obj, err_msg
     assert np.all([np.issubdtype(i0, np.integer) for i0 in show_idx]), err_msg
     show_list = problem.obj_list[show_idx]
-    range_list = problem.obj_list if plt_full_range else show_list
+    range_list = problem.obj_list if plt_full_obj else show_list
+    # print('dbg range_list', range_list)
+    return tidx, show_list, range_list, fig, axi
 
+
+def _trajectory2D_fun_fun(obji: 'particleClass.particle2D', tidx, axi, cmap, t0_marker,
+                          interp1d_kind, resampling_fct, **line_fun_kwargs):
+    # tcolor = cmap(obji.index / problem.n_obj)
+    # color = np.ones((X_hist.shape[0], 4)) * tcolor
+    # color[:, 3] = np.linspace(0, tcolor[3], X_hist.shape[0])
+    # axi.plot(X_hist[:, 0], X_hist[:, 1], '-', color=color)
+
+    problem = obji.father
+    t_hist = problem.t_hist[tidx]
+    norm = plt.Normalize(0.0, 1.0)
+    X_hist = obji.X_hist[tidx]
+
+    if resampling_fct is not None:
+        X_hist = resampling_data(t_hist, X_hist, resampling_fct=resampling_fct, interp1d_kind=interp1d_kind)
+    axi.scatter(X_hist[0, 0], X_hist[0, 1], color='k', marker=t0_marker)
+
+    lc = LineCollection(make_segments(X_hist[:, 0], X_hist[:, 1]),
+                        array=np.linspace(0.0, 1.0, X_hist.shape[0]),
+                        cmap=RBGColormap(cmap(obji.index / problem.n_obj), ifcheck=False),
+                        norm=norm)
+    axi.add_collection(lc)
+    return axi
+
+
+def _segments_fun(obji: 'particleClass.particle2D', tidx, axi, cmap, t0_marker,
+                  interp1d_kind, resampling_fct, **line_fun_kwargs):
+    problem = obji.father
+    t_hist = problem.t_hist[tidx]
+    X_hist = obji.X_hist[tidx]
+
+    if resampling_fct is not None:
+        X_hist = resampling_data(t_hist, X_hist, resampling_fct=resampling_fct, interp1d_kind=interp1d_kind)
+    axi.scatter(X_hist[0, 0], X_hist[0, 1], color='k', marker=t0_marker)
+
+    spr_idx = separate_idx(X_hist.T)
+    for tidx0, tidx1 in spr_idx:
+        axi.plot(X_hist[tidx0:tidx1, 0], X_hist[tidx0:tidx1, 1], c=cmap(obji.index / problem.n_obj),
+                 **line_fun_kwargs)
+    return axi
+
+
+def _core_X2D_fun(problem: 'problemClass._base2DProblem', line_fun, show_idx=None,
+                  figsize=np.array((50, 50)) * 5, dpi=100, plt_tmin=-np.inf, plt_tmax=np.inf,
+                  resampling_fct=None, interp1d_kind='quadratic',
+                  t0_marker='s', cmap=plt.get_cmap('brg'),
+                  plt_full_obj=True, plt_full_time=True, **line_fun_kwargs):
+    _ = _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx, plt_full_obj)
+    tidx, show_list, range_list, fig, axi = _
     if np.any(tidx):
         # plot
         for obji in show_list:
-            X_hist = obji.X_hist[tidx]
-            if resampling_fct is not None:
-                X_hist = resampling_data(t_hist, X_hist, resampling_fct=resampling_fct, interp1d_kind=interp1d_kind)
-            axi.scatter(X_hist[0, 0], X_hist[0, 1], color='k', marker=t0_marker)
-
-            # tcolor = cmap(obji.index / problem.n_obj)
-            # color = np.ones((X_hist.shape[0], 4)) * tcolor
-            # color[:, 3] = np.linspace(0, tcolor[3], X_hist.shape[0])
-            # axi.plot(X_hist[:, 0], X_hist[:, 1], '-', color=color)
-
-            lc = LineCollection(make_segments(X_hist[:, 0], X_hist[:, 1]),
-                                array=np.linspace(0.0, 1.0, X_hist.shape[0]),
-                                cmap=RBGColormap(cmap(obji.index / problem.n_obj), ifcheck=False),
-                                norm=norm)
-            axi.add_collection(lc)
-            # axi.plot(X_hist[:, 0], X_hist[:, 1], ' ')
-
+            line_fun(obji, tidx, axi, cmap, t0_marker, interp1d_kind, resampling_fct, **line_fun_kwargs)
         # set range
-        Xmax_all = np.array([obji.X_hist[tidx].max(axis=0) for obji in range_list])
-        Xmin_all = np.array([obji.X_hist[tidx].min(axis=0) for obji in range_list])
-        Xrng_all = Xmax_all - Xmin_all
-        targmax = np.argmax(Xrng_all, axis=0)
-        tidx = targmax[0] if Xrng_all[targmax[0]][0] > Xrng_all[targmax[1]][1] else targmax[1]
-        Xrng = np.max(Xmax_all[tidx] - Xmin_all[tidx]) * 0.55
-        Xmid = (Xmax_all[tidx] + Xmin_all[tidx]) / 2
+        tidx = np.ones_like(tidx) if plt_full_time else tidx
+        Xmax = np.array([obji.X_hist[tidx].max(axis=0) for obji in range_list]).max(axis=0)
+        Xmin = np.array([obji.X_hist[tidx].min(axis=0) for obji in range_list]).min(axis=0)
+        Xrng = (Xmax - Xmin).max() * 0.55
+        Xmid = (Xmax + Xmin) / 2
         axi.set_xlim(Xmid[0] - Xrng, Xmid[0] + Xrng)
         axi.set_ylim(Xmid[1] - Xrng, Xmid[1] + Xrng)
-        # set_axes_equal(axi)
+        # # set_axes_equal(axi)
     else:
         logger = problem.logger
         logger.info(' ')
         logger.warn('Problem %s has no time in range (%f, %f)' % (str(problem), plt_tmin, plt_tmax))
-    return fig
+    return fig, axi
+
+
+def core_trajectory2D(*args, **kwargs):
+    return _core_X2D_fun(line_fun=_trajectory2D_fun_fun, *args, **kwargs)
+
+
+def core_segments2D(*args, **kwargs):
+    return _core_X2D_fun(line_fun=_segments_fun, *args, **kwargs)
+
+
+def cal_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
+                         t_tmin=-np.inf, t_tmax=np.inf,
+                         resampling_fct=1, interp1d_kind='quadratic',
+                         tavr=1):
+    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
+    avg_stp = np.ceil(tavr / dt_res).astype('int')
+    weights = np.ones(avg_stp) / avg_stp
+
+    avg_all = []
+    for obji in problem.obj_list:  # type:particleClass.particle2D
+        W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
+        avg_all.append(np.convolve(weights, W_hist, mode='same'))
+    avg_all = np.abs(np.vstack(avg_all))
+    avg_stpD2 = avg_stp // 2
+    for i0 in np.arange(avg_stpD2):
+        avg_all[:, i0] = avg_all[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        avg_all[:, i1] = avg_all[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+    return t_use, avg_all
+
+
+def cal_avrInfo(problem: 'problemClass._base2DProblem',
+                t_tmin=-np.inf, t_tmax=np.inf,
+                resampling_fct=1, interp1d_kind='quadratic',
+                tavr=1):
+    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
+    avg_stp = np.ceil(tavr / dt_res).astype('int')
+    t_return = t_use
+    weights = np.ones(avg_stp) / avg_stp
+
+    W_avg = []
+    phi_avg = []
+    for obji in problem.obj_list:  # type:particleClass.particle2D
+        W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
+        phi_hist = get_continue_angle(t_hist, obji.phi_hist[tidx], t_use=t_use)
+        W_avg.append(np.convolve(weights, W_hist, mode='same'))
+        phi_avg.append(np.convolve(weights, phi_hist, mode='same'))
+    W_avg = np.abs(np.vstack(W_avg))
+    phi_avg = np.vstack(phi_avg)
+    return t_return, W_avg, phi_avg
+
+
+def core_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
+                          figsize=np.array((50, 50)) * 5, dpi=100,
+                          plt_tmin=-np.inf, plt_tmax=np.inf,
+                          resampling_fct=1, interp1d_kind='quadratic',
+                          vmin=None, vmax=None,
+                          norm=None,
+                          cmap=plt.get_cmap('bwr'), tavr=1):
+    # _ = _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx=None, plt_full_obj=True)
+    # tidx, show_list, range_list, fig, axi = _
+    # if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
+    #     tidx[0] = False
+    # t_hist = problem.t_hist[tidx]
+    # t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
+    # avg_stp = np.ceil(tavr / dt_res).astype('int')
+    # idx_min = 0
+    # idx_max = (t_use.size // avg_stp) * avg_stp + idx_min
+    # t_plot = np.mean(t_use[idx_min:idx_max].reshape((-1, avg_stp)), axis=-1)
+    #
+    # avg_all = []
+    # for obji in show_list:  # type:particleClass.particle2D
+    #     W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
+    #     avg_all.append(np.mean(W_hist[idx_min:idx_max].reshape((-1, avg_stp)), axis=-1))
+    # avg_all = np.vstack(avg_all)
+
+    t_plot, avg_all = cal_avrPhaseVelocity(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                           resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                           tavr=tavr)
+    sort_idx = np.argsort(np.mean(avg_all[:, t_plot > t_plot.max() / 2], axis=-1))
+
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    # if avg_all.min() * avg_all.max() < 0:
+    #     norm = midLinearNorm(midpoint=0, vmin=avg_all.min(), vmax=avg_all.max())
+    # else:
+    #     norm = Normalize(vmin=avg_all.min(), vmax=avg_all.max())
+    if norm is None:
+        vmin = avg_all.min() if vmin is None else vmin
+        vmax = avg_all.max() if vmax is None else vmax
+        print('norm in range (%f, %f)' % (vmin, vmax))
+        norm = Normalize(vmin=vmin, vmax=vmax)
+    else:
+        print('ignore parameters vmin and vmax. ')
+    # norm = LogNorm(vmin=vmin, vmax=vmax)
+    obj_idx = np.arange(1, problem.n_obj + 1)
+    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
+    c = axi.pcolorfast(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm)
+    clb = fig.colorbar(c, ax=axi)
+    clb.ax.set_title('$ | \\langle \\dot{\\phi} \\rangle | $', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(1, problem.n_obj)
+
+    # # dbg
+    print(t_plot.shape, np.arange(problem.n_obj).shape, avg_all.shape)
+    return fig, axi
+
+
+def cal_polar_order(problem: 'problemClass._base2DProblem',
+                    t_tmin=-np.inf, t_tmax=np.inf, ):
+    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+
+    cplx_R = np.mean(np.array([(np.cos(tobj.phi_hist[tidx]), np.sin(tobj.phi_hist[tidx]))
+                               for tobj in problem.obj_list]), axis=0).T
+    # avg_all = np.vstack(avg_all)
+    return t_hist, cplx_R
