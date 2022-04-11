@@ -60,7 +60,7 @@ rltHandle_dict = {
     'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
     'do_actLight2D':               relationClass.AllBaseRelation2D,
     'do_phaseLag2D':               relationClass.localBaseRelation2D,
-    'do_phaseLagPeriodic2D':       relationClass.localBaseRelation2D,
+    'do_phaseLagPeriodic2D':       relationClass.periodicLocalRelation2D,
 }
 
 ptcHandle_dict = {

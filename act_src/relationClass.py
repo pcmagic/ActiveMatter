@@ -328,4 +328,24 @@ class localBaseRelation2D(_baseRelation2D):
         spf.petscInfo(self.father.logger, '  localRange=%e' % self.localRange)
         return True
 
-# class periodicLocalRelation2D(localBaseRelation2D):
+
+class periodicLocalRelation2D(localBaseRelation2D):
+    def check_self(self, **kwargs):
+        super().check_self(**kwargs)
+        err_msg = 'wrong problem type, only type %s is accepted. ' % (problemClass.periodic2DProblem)
+        assert isinstance(self.father, problemClass.periodic2DProblem), err_msg
+        return True
+
+    def cal_rho(self):
+        prb = self.father  # type: problemClass.periodic2DProblem
+        Xrange = prb.Xrange
+        halfXrange = prb.halfXrange
+        rho_ij = np.zeros((prb.n_obj, prb.n_obj))
+        obji: particleClass.particle2D
+        for i0, obji in enumerate(prb.obj_list):
+            tPij = np.abs(prb.Xall - obji.X)
+            tPij = np.where(tPij > halfXrange, tPij - Xrange, tPij)
+            trhoij = np.linalg.norm(tPij, axis=-1)
+            rho_ij[i0, :] = trhoij
+        self._rho_ij = rho_ij
+        return True

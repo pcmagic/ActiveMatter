@@ -795,14 +795,19 @@ class actLimFiniteDipole2DProblem(behavior2DProblem, limFiniteDipole2DProblem):
         pass
 
 
-class _periodic2DProblem(_base2DProblem):
+class periodic2DProblem(_base2DProblem):
     def __init__(self, name='...', Xrange=1, **kwargs):
         super().__init__(name, **kwargs)
         self._Xrange = Xrange
+        self._halfXrange = Xrange / 2
 
     @property
     def Xrange(self):
         return self._Xrange
+
+    @property
+    def halfXrange(self):
+        return self._halfXrange
 
     def _postfunction(self, ts):
         super()._postfunction(ts)
@@ -821,7 +826,7 @@ class _periodic2DProblem(_base2DProblem):
         return True
 
 
-class actPeriodic2DProblem(_periodic2DProblem, behavior2DProblem):
+class actPeriodic2DProblem(periodic2DProblem, behavior2DProblem):
     # class actPeriodic2DProblem(behavior2DProblem):
     def _nothing(self):
         pass

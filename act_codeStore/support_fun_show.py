@@ -730,7 +730,7 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
     if rank == 0:
         backend = matplotlib.get_backend()
         matplotlib.use('Agg')
-        fig = fig_handle(problem=problem, *args, **kwargs)
+        fig, axi = fig_handle(problem=problem, *args, **kwargs)
         # fig.savefig(fname=filename, dpi=dpi, metadata=metadata)
         fig.savefig(fname=filename, dpi=dpi)
         plt.close(fig)
