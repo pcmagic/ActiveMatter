@@ -15,6 +15,7 @@ from petsc4py import PETSc
 from tqdm import tqdm
 import shutil
 import os
+from matplotlib import colors as mcolors
 
 from act_src import problemClass
 from act_src import relationClass
@@ -25,55 +26,92 @@ from act_codeStore import support_fun_calculate as spc
 from act_codeStore import support_fun_show as sps
 
 calculate_fun_dict = {
-    'do_FiniteDipole2D':           spc.do_FiniteDipole2D,
-    'do_LimFiniteDipole2D':        spc.do_LimFiniteDipole2D,
-    'do_behaviorParticle2D':       spc.do_behaviorParticle2D,
-    'dbg_behaviorParticle2D':      spc.dbg_behaviorParticle2D,
-    'do_behaviorWienerParticle2D': spc.do_behaviorWienerParticle2D,
-    'do_dbgBokaiZhang':            spc.do_dbgBokaiZhang,
-    'do_actLimFiniteDipole2D':     spc.do_actLimFiniteDipole2D,
-    'do_actLight2D':               spc.do_actLight2D,
-    'do_phaseLag2D':               spc.do_phaseLag2D,
-    'do_phaseLagPeriodic2D':       spc.do_phaseLagPeriodic2D,
+    'do_FiniteDipole2D':              spc.do_FiniteDipole2D,
+    'do_LimFiniteDipole2D':           spc.do_LimFiniteDipole2D,
+    'do_behaviorParticle2D':          spc.do_behaviorParticle2D,
+    'dbg_behaviorParticle2D':         spc.dbg_behaviorParticle2D,
+    'do_behaviorWienerParticle2D':    spc.do_behaviorWienerParticle2D,
+    'do_dbgBokaiZhang':               spc.do_dbgBokaiZhang,
+    'do_actLimFiniteDipole2D':        spc.do_actLimFiniteDipole2D,
+    'do_actLight2D':                  spc.do_actLight2D,
+    'do_phaseLag2D':                  spc.do_phaseLag2D,
+    'do_phaseLag2D_dbg':              spc.do_phaseLag2D_dbg,
+    'do_phaseLagWiener2D':            spc.do_phaseLagWiener2D,
+    'do_phaseLagPeriodic2D':          spc.do_phaseLagPeriodic2D,
+    'do_phaseLagPeriodic2D_LJ':       spc.do_phaseLagPeriodic2D_LJ,
+    'do_phaseLag2D_AR':               spc.do_phaseLag2D_AR,
+    'do_phaseLag2D_AR_Voronoi':       spc.do_phaseLag2D_AR,
+    'do_phaseLagWiener2D_AR':         spc.do_phaseLagWiener2D_AR,
+    'do_phaseLagWiener2D_AR_Voronoi': spc.do_phaseLagWiener2D_AR,
+    'do_phaseLag2D_Wiener':           spc.do_phaseLag2D_Wiener,
+    'do_dbg_action':                  spc.do_dbg_action,
 }
 
 prbHandle_dict = {
-    'do_FiniteDipole2D':           problemClass.finiteDipole2DProblem,
-    'do_LimFiniteDipole2D':        problemClass.limFiniteDipole2DProblem,
-    'do_behaviorParticle2D':       problemClass.behavior2DProblem,
-    'dbg_behaviorParticle2D':      problemClass.behavior2DProblem,
-    'do_behaviorWienerParticle2D': problemClass.behavior2DProblem,
-    'do_dbgBokaiZhang':            problemClass.behavior2DProblem,
-    'do_actLimFiniteDipole2D':     problemClass.actLimFiniteDipole2DProblem,
-    'do_actLight2D':               problemClass.actLimFiniteDipole2DProblem,
-    'do_phaseLag2D':               problemClass.behavior2DProblem,
-    'do_phaseLagPeriodic2D':       problemClass.actPeriodic2DProblem,
+    'do_FiniteDipole2D':              problemClass.finiteDipole2DProblem,
+    'do_LimFiniteDipole2D':           problemClass.limFiniteDipole2DProblem,
+    'do_behaviorParticle2D':          problemClass.behavior2DProblem,
+    'dbg_behaviorParticle2D':         problemClass.behavior2DProblem,
+    'do_behaviorWienerParticle2D':    problemClass.behavior2DProblem,
+    'do_dbgBokaiZhang':               problemClass.behavior2DProblem,
+    'do_actLimFiniteDipole2D':        problemClass.actLimFiniteDipole2DProblem,
+    'do_actLight2D':                  problemClass.actLimFiniteDipole2DProblem,
+    'do_phaseLag2D':                  problemClass.behavior2DProblem,
+    'do_phaseLag2D_dbg':              problemClass.behavior2DProblem,
+    'do_phaseLagWiener2D':            problemClass.behavior2DProblem,
+    'do_phaseLagPeriodic2D':          problemClass.actPeriodic2DProblem,
+    'do_phaseLagPeriodic2D_LJ':       problemClass.actPeriodic2DProblem,
+    'do_phaseLag2D_AR':               problemClass.behavior2DProblem,
+    'do_phaseLag2D_AR_Voronoi':       problemClass.behavior2DProblem,
+    'do_phaseLagWiener2D_AR':         problemClass.behavior2DProblem,
+    'do_phaseLagWiener2D_AR_Voronoi': problemClass.behavior2DProblem,
+    'do_phaseLag2D_Wiener':           problemClass.behavior2DProblem,
+    'do_dbg_action':                  problemClass.finiteDipole2DProblem,
 }
 
 rltHandle_dict = {
-    'do_FiniteDipole2D':           relationClass.finiteRelation2D,
-    'do_LimFiniteDipole2D':        relationClass.limFiniteRelation2D,
-    'do_behaviorParticle2D':       relationClass.VoronoiBaseRelation2D,
-    'dbg_behaviorParticle2D':      relationClass.AllBaseRelation2D,
-    'do_behaviorWienerParticle2D': relationClass.VoronoiBaseRelation2D,
-    'do_dbgBokaiZhang':            relationClass.VoronoiBaseRelation2D,
-    'do_actLimFiniteDipole2D':     relationClass.VoronoiBaseRelation2D,
-    'do_actLight2D':               relationClass.AllBaseRelation2D,
-    'do_phaseLag2D':               relationClass.localBaseRelation2D,
-    'do_phaseLagPeriodic2D':       relationClass.periodicLocalRelation2D,
+    'do_FiniteDipole2D':              relationClass.finiteRelation2D,
+    'do_LimFiniteDipole2D':           relationClass.limFiniteRelation2D,
+    'do_behaviorParticle2D':          relationClass.VoronoiBaseRelation2D,
+    'dbg_behaviorParticle2D':         relationClass.AllBaseRelation2D,
+    'do_behaviorWienerParticle2D':    relationClass.VoronoiBaseRelation2D,
+    'do_dbgBokaiZhang':               relationClass.VoronoiBaseRelation2D,
+    'do_actLimFiniteDipole2D':        relationClass.VoronoiBaseRelation2D,
+    'do_actLight2D':                  relationClass.AllBaseRelation2D,
+    'do_phaseLag2D':                  relationClass.localBaseRelation2D,
+    # 'do_phaseLag2D':                  relationClass.AllBaseRelation2D,
+    'do_phaseLag2D_dbg':              relationClass.localBaseRelation2D,
+    'do_phaseLagWiener2D':            relationClass.localBaseRelation2D,
+    'do_phaseLagPeriodic2D':          relationClass.periodicLocalRelation2D,
+    'do_phaseLagPeriodic2D_LJ':       relationClass.periodicLocalRelation2D,
+    'do_phaseLag2D_AR':               relationClass.localBaseRelation2D,
+    'do_phaseLag2D_AR_Voronoi':       relationClass.VoronoiBaseRelation2D,
+    'do_phaseLagWiener2D_AR':         relationClass.localBaseRelation2D,
+    'do_phaseLagWiener2D_AR_Voronoi': relationClass.VoronoiBaseRelation2D,
+    'do_phaseLag2D_Wiener':           relationClass.localBaseRelation2D,
+    'do_dbg_action':                  relationClass.finiteRelation2D,
 }
 
 ptcHandle_dict = {
-    'do_FiniteDipole2D':           particleClass.finiteDipole2D,
-    'do_LimFiniteDipole2D':        particleClass.limFiniteDipole2D,
-    'do_behaviorParticle2D':       particleClass.particle2D,
-    'dbg_behaviorParticle2D':      particleClass.particle2D,
-    'do_behaviorWienerParticle2D': particleClass.particle2D,
-    'do_dbgBokaiZhang':            particleClass.particle2D,
-    'do_actLimFiniteDipole2D':     particleClass.limFiniteDipole2D,
-    'do_actLight2D':               particleClass.limFiniteDipole2D,
-    'do_phaseLag2D':               particleClass.particle2D,
-    'do_phaseLagPeriodic2D':       particleClass.particle2D,
+    'do_FiniteDipole2D':              particleClass.finiteDipole2D,
+    'do_LimFiniteDipole2D':           particleClass.limFiniteDipole2D,
+    'do_behaviorParticle2D':          particleClass.particle2D,
+    'dbg_behaviorParticle2D':         particleClass.particle2D,
+    'do_behaviorWienerParticle2D':    particleClass.particle2D,
+    'do_dbgBokaiZhang':               particleClass.particle2D,
+    'do_actLimFiniteDipole2D':        particleClass.limFiniteDipole2D,
+    'do_actLight2D':                  particleClass.limFiniteDipole2D,
+    'do_phaseLag2D':                  particleClass.particle2D,
+    'do_phaseLag2D_dbg':              particleClass.particle2D,
+    'do_phaseLagWiener2D':            particleClass.particle2D,
+    'do_phaseLagPeriodic2D':          particleClass.particle2D,
+    'do_phaseLagPeriodic2D_LJ':       particleClass.particle2D,
+    'do_phaseLag2D_AR':               particleClass.particle2D,
+    'do_phaseLag2D_AR_Voronoi':       particleClass.particle2D,
+    'do_phaseLagWiener2D_AR':         particleClass.particle2D,
+    'do_phaseLagWiener2D_AR_Voronoi': particleClass.particle2D,
+    'do_phaseLag2D_Wiener':           particleClass.particle2D,
+    'do_dbg_action':                  particleClass.finiteDipole2D,
 }
 
 
@@ -82,6 +120,7 @@ def get_problem_kwargs(**main_kwargs):
     OptDB = PETSc.Options()
 
     ini_t = np.float64(OptDB.getReal('ini_t', 0))
+    ign_t = np.float64(OptDB.getReal('ign_t', ini_t))
     max_t = np.float64(OptDB.getReal('max_t', 1))
     update_fun = OptDB.getString('update_fun', '1fe')
     rtol = np.float64(OptDB.getReal('rtol', 1e-3))
@@ -105,43 +144,58 @@ def get_problem_kwargs(**main_kwargs):
 
     # chimera
     phaseLag2D = np.float64(OptDB.getReal('phaseLag2D', 0)) * np.pi
+    phaseLag_rdm_fct = np.float64(OptDB.getReal('phaseLag_rdm_fct', 0)) * np.pi
     localRange = np.float64(OptDB.getReal('localRange', 0))
+
+    # Lennard Jone Potential
+    LJ_A = np.float64(OptDB.getReal('LJ_UA', 0))
+    LJ_B = np.float64(OptDB.getReal('LJ_UB', 0))
+    LJ_a = np.float64(OptDB.getReal('LJ_la', 0))
+    LJ_b = np.float64(OptDB.getReal('LJ_lb', 0))
 
     # periodic boundary condition
     Xrange = np.float64(OptDB.getReal('Xrange', Xlim))
 
+    err_msg = 'wrong parameter eval_dt, eval_dt>0. '
+    assert eval_dt > 0, err_msg
     # err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
     # assert nptc > 4, err_msg
     seed = seed0 if seed0 >= 0 else None
     np.random.seed(seed)
 
     problem_kwargs = {
-        'ini_t':           ini_t,
-        'max_t':           max_t,
-        'update_fun':      update_fun,
-        'update_order':    (rtol, atol),
-        'eval_dt':         eval_dt,
-        'calculate_fun':   calculate_fun_dict[calculate_fun],
-        'prbHandle':       prbHandle_dict[calculate_fun],
-        'rltHandle':       rltHandle_dict[calculate_fun],
-        'ptcHandle':       ptcHandle_dict[calculate_fun],
-        'fileHandle':      fileHandle,
-        'save_every':      save_every,
-        'nptc':            nptc,
-        'overlap_epsilon': overlap_epsilon,
-        'un':              un,
-        'ln':              ln,
-        'Xlim':            Xlim,
-        'Xrange':          Xrange,
-        'attract':         attract,
-        'align':           align,
-        'viewRange':       viewRange,
-        'phaseLag2D':      phaseLag2D,
-        'localRange':      localRange,
-        'rot_noise':       rot_noise,
-        'trs_noise':       trs_noise,
-        'seed':            seed,
-        'tqdm_fun':        tqdm,
+        'ini_t':            ini_t,
+        'ign_t':            ign_t,
+        'max_t':            max_t,
+        'update_fun':       update_fun,
+        'update_order':     (rtol, atol),
+        'eval_dt':          eval_dt,
+        'calculate_fun':    calculate_fun_dict[calculate_fun],
+        'prbHandle':        prbHandle_dict[calculate_fun],
+        'rltHandle':        rltHandle_dict[calculate_fun],
+        'ptcHandle':        ptcHandle_dict[calculate_fun],
+        'fileHandle':       fileHandle,
+        'save_every':       save_every,
+        'nptc':             nptc,
+        'overlap_epsilon':  overlap_epsilon,
+        'un':               un,
+        'ln':               ln,
+        'Xlim':             Xlim,
+        'Xrange':           Xrange,
+        'attract':          attract,
+        'align':            align,
+        'viewRange':        viewRange,
+        'phaseLag2D':       phaseLag2D,
+        'localRange':       localRange,
+        'LJ_A':             LJ_A,
+        'LJ_B':             LJ_B,
+        'LJ_a':             LJ_a,
+        'LJ_b':             LJ_b,
+        'rot_noise':        rot_noise,
+        'trs_noise':        trs_noise,
+        'phaseLag_rdm_fct': phaseLag_rdm_fct,
+        'seed':             seed,
+        'tqdm_fun':         tqdm,
     }
 
     kwargs_list = (main_kwargs,)
@@ -152,14 +206,16 @@ def get_problem_kwargs(**main_kwargs):
 
 
 def do_pickle(prb1: problemClass._baseProblem, **kwargs):
-    prb1.pickmyself(**kwargs)
+    prb1.pick_prepare()
+    prb1.pick_myself(**kwargs)
     return True
 
 
 def do_hdf5(prb1: problemClass._baseProblem, **kwargs):
+    prb1.pick_prepare()
     prb1.hdf5_pick(**kwargs)
     prb1.empty_hist()
-    prb1.pickmyself(**kwargs)
+    prb1.pick_myself(**kwargs)
     return True
 
 
@@ -198,16 +254,54 @@ def export_avrPhaseVelocity(prb1: problemClass._baseProblem, tavr=10, **kwargs):
     rank = comm.Get_rank()
 
     # setup
-    figsize = np.array((16, 9)) * 0.3
-    dpi = 300
-    resampling_fct, interp1d_kind = 1, 'linear'
     export_avrPhaseVelocity = OptDB.getBool('export_avrPhaseVelocity', True)
-
     if rank == 0 and export_avrPhaseVelocity:
-        filename = '%s/avrW_%s.png' % (prb1.name, prb1.name)
-        sps.save_fig_fun(filename, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi,
-                         plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct,
-                         cmap=plt.get_cmap('bwr'), tavr=tavr)
+        figsize = np.array((16, 9)) * 0.4
+        dpi = 400
+        plt_tmin, plt_tmax = -1, prb1.t_hist.max()
+        resampling_fct, interp1d_kind = 1, 'linear'
+        cmap = plt.get_cmap('viridis')
+        avrW_name = '%s/avrW_%s.png' % (prb1.name, prb1.name)
+        sps.save_fig_fun(avrW_name, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi,
+                         plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct, cmap=cmap,
+                         tavr=tavr)
+    return True
+
+
+def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
+    OptDB = PETSc.Options()
+    comm = PETSc.COMM_WORLD.tompi4py()
+    rank = comm.Get_rank()
+
+    # setup
+    export_20220629 = OptDB.getBool('export_20220629', False)
+    if rank == 0 and export_20220629:
+        figsize = np.array((16, 9)) * 0.3
+        dpi, plt_tmin, plt_tmax = 400, -1, prb1.t_hist.max()
+        resampling_fct, interp1d_kind = 1, 'linear'
+        vmin, vmax = -1, 1
+        cmap = sps.twilight_diverging()
+        fig_name = '%s/avrW_%s.png' % (prb1.name, prb1.name)
+        sps.save_fig_fun(fig_name, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi,
+                         plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct, cmap=cmap,
+                         vmin=vmin, vmax=vmax, npabs=False, tavr=tavr)
+        # ----------------------------------
+        markevery, linestyle = 0.3, 'o-C1',
+        fig_name = '%s/orderR_%s.png' % (prb1.name, prb1.name)
+        sps.save_fig_fun(fig_name, prb1, sps.core_polar_order, figsize=figsize, dpi=dpi,
+                         plt_tmin=plt_tmin, plt_tmax=plt_tmax, markevery=markevery, linestyle=linestyle)
+        # ----------------------------------
+        cmap = plt.get_cmap('twilight_shifted')
+        fig_name = '%s/avrPhi1_%s.png' % (prb1.name, prb1.name)
+        sps.save_fig_fun(fig_name, prb1, sps.core_avrPhase, figsize=figsize, dpi=dpi,
+                         plt_tmin=plt_tmin, plt_tmax=plt_tmax,
+                         resampling_fct=resampling_fct, cmap=cmap,
+                         tavr=0.01, sort_type='normal')
+        # fig_name = '%s/avrPhi2_%s.png' % (prb1.name, prb1.name)
+        # sps.save_fig_fun(fig_name, prb1, sps.core_avrPhase, figsize=figsize, dpi=dpi,
+        #                  plt_tmin=plt_tmin, plt_tmax=plt_tmax,
+        #                  resampling_fct=resampling_fct, cmap=cmap,
+        #                  tavr=0.01, sort_type='traveling')
     return True
 
 
@@ -235,7 +329,32 @@ def main_fun(**main_kwargs):
     # time.sleep(2)
     export_trajectory2D(prb1)
     export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
+    # export_20220629(prb1, tavr=np.min((10, max_t / 10)))
+    export_20220629(prb1, tavr=eval_dt)
     # export_avrPhaseVelocity(prb1, tavr=1)
+
+    return True
+
+
+def main_ignFirst(**main_kwargs):
+    problem_kwargs = get_problem_kwargs(**main_kwargs)
+    ini_t = problem_kwargs['ini_t']
+    ign_t = problem_kwargs['ign_t']
+    max_t = problem_kwargs['max_t']
+    eval_dt = problem_kwargs['eval_dt']
+
+    doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
+    prb1 = doPrb1.ini_calculate()
+    if ign_t > ini_t:
+        prb1.do_save = False
+        prb1.update_self(t0=ini_t, t1=ign_t, eval_dt=eval_dt)
+        prb1.do_save = True
+    prb1.update_self(t0=ign_t, t1=max_t, eval_dt=eval_dt)
+    do_hdf5(prb1, **problem_kwargs)
+    prb1.hdf5_load()
+    export_trajectory2D(prb1)
+    export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
+    export_20220629(prb1, tavr=eval_dt)
     return True
 
 
@@ -244,6 +363,10 @@ if __name__ == '__main__':
     if OptDB.getBool('main_profile', False):
         OptDB.setValue('main_fun', False)
         main_profile()
+
+    if OptDB.getBool('main_ignFirst', False):
+        OptDB.setValue('main_fun', False)
+        main_ignFirst()
 
     if OptDB.getBool('main_fun', True):
         main_fun()

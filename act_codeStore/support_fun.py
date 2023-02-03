@@ -43,11 +43,12 @@ def func_line(x, a0, a1):
 
 
 def fit_line(ax, x, y, x0, x1, ifprint=1, linestyle='-.', linewidth=1, extendline=False,
-             color='k', alpha=0.7):
+             color='k', alpha=0.7, weight=None):
     idx = np.array(x >= x0) & np.array(x <= x1) & np.isfinite(x) & np.isfinite(y)
     tx = x[idx]
     ty = y[idx]
-    fit_para = np.polyfit(tx, ty, 1)
+    weight = np.ones_like(tx) if weight is None else weight
+    fit_para = np.polyfit(tx, ty, 1, w=weight)
     pol_y = np.poly1d(fit_para)
     if extendline:
         fit_x = np.linspace(x.min(), x.max(), 100)
@@ -63,12 +64,13 @@ def fit_line(ax, x, y, x0, x1, ifprint=1, linestyle='-.', linewidth=1, extendlin
 
 
 def fit_power_law(ax, x, y, x0, x1, ifprint=1, linestyle='-.', linewidth=1, extendline=False,
-                  color='k', alpha=0.7):
+                  color='k', alpha=0.7, weight=None):
     idx = np.array(x >= x0) & np.array(x <= x1) & np.isfinite((np.log10(x))) & np.isfinite(
         (np.log10(y)))
     tx = np.log10(x[idx])
     ty = np.log10(y[idx])
-    fit_para = np.polyfit(tx, ty, 1)
+    weight = np.ones_like(tx) if weight is None else weight
+    fit_para = np.polyfit(tx, ty, 1, w=weight)
     pol_y = np.poly1d(fit_para)
 
     if extendline:
@@ -87,11 +89,12 @@ def fit_power_law(ax, x, y, x0, x1, ifprint=1, linestyle='-.', linewidth=1, exte
 
 
 def fit_semilogy(ax, x, y, x0, x1, ifprint=1, linestyle='-.', linewidth=1, extendline=False,
-                 color='k', alpha=0.7):
+                 color='k', alpha=0.7, weight=None):
     idx = np.array(x >= x0) & np.array(x <= x1) & np.isfinite(x) & np.isfinite(np.log10(y))
     tx = x[idx]
     ty = np.log10(y[idx])
-    fit_para = np.polyfit(tx, ty, 1)
+    weight = np.ones_like(tx) if weight is None else weight
+    fit_para = np.polyfit(tx, ty, 1, w=weight)
     pol_y = np.poly1d(fit_para)
     if extendline:
         fit_x = np.linspace(x.min(), x.max(), 30)
@@ -457,8 +460,40 @@ def write_slurm_head_v5_192(fpbs, job_name, nodes=1):
 #     fpbs.write('\n')
 #     return True
 
+def write_upload_download(remote_path, case_folder, job_dir, write_pbs_head000):
+    # generate upload and download scripts.
 
-def _write_main_run_top(frun, main_hostname='ln0'):
+    PWD = os.getcwd()
+    t_path = os.path.join(PWD, job_dir) if case_folder is None else os.path.join(PWD, case_folder, job_dir)
+    if remote_path is not None:
+        if write_pbs_head000 is write_slurm_head_v5_192:
+            scp_comm = 'papp_cloud scp -i ~/.ssh/scfa1057.id'
+            # rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -avzh --progress'
+            rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -z'
+            ssh_info = 'scfa1057@nc-e'
+        else:
+            raise ValueError('wrong write_pbs_head000 for remote_path')
+        remote_path = os.path.join(remote_path, job_dir) if case_folder is None \
+            else os.path.join(remote_path, case_folder, job_dir)
+        upsh = os.path.join(t_path, 'upload.sh')
+        with open(upsh, 'w') as fup:
+            fup.write('%s ./ %s:%s\n' % (scp_comm, ssh_info, remote_path))
+            fup.write('echo \n')
+            fup.write('echo upload current folder to %s:%s\n\n' % (ssh_info, remote_path))
+        dnsh = os.path.join(t_path, 'download.sh')
+        with open(dnsh, 'w') as fup:
+            fup.write('RC=1\n')
+            fup.write('while [[ $RC -ne 0 ]]\n')
+            fup.write('do\n')
+            fup.write('   %s %s:%s/ ./\n' % (rsync_comm, ssh_info, remote_path))
+            fup.write('   RC=$?\n')
+            fup.write('   sleep 1\n')
+            fup.write('done\n')
+            fup.write('\n')
+    return True
+
+
+def write_main_run_top(frun, main_hostname='ln0'):
     frun.write('t_dir=$PWD \n')
     frun.write('bash_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" \n\n')
 
@@ -483,9 +518,7 @@ def write_main_run(write_pbs_head, job_dir, ncase):
     return True
 
 
-def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
-                             write_pbs_head000=write_pbs_head, n_job_pbs=None,
-                             random_order=False, remote_path=None):
+def pbs_head_info(write_pbs_head000, use_node):
     def _parallel_pbs_ln0(n_use_comm, njob_node, csh_name):
         t2 = 'seq 0 %d | parallel -j %d --ungroup ' % (n_use_comm - 1, njob_node)
         t2 = t2 + ' --sshloginfile $PBS_NODEFILE --sshdelay 0.1 '
@@ -504,32 +537,6 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
         t2 = t2 + ' --sshdelay 0.1 '
         t2 = t2 + ' "cd $PWD; echo $PWD; echo; bash %s {} true " \n\n ' % csh_name
         return t2
-
-    PWD = os.getcwd()
-    comm_list = np.array(comm_list)
-    txt_list = np.array(txt_list)
-    t_path = os.path.join(PWD, job_dir)
-    if not os.path.exists(t_path):
-        os.makedirs(t_path)
-        print('make folder %s' % t_path)
-    else:
-        print('exist folder %s' % t_path)
-    n_case = len(comm_list)
-    if n_job_pbs is None:
-        n_job_pbs = use_node * njob_node
-    n_pbs = (n_case // n_job_pbs) + np.sign(n_case % n_job_pbs)
-    if random_order:
-        tidx = np.arange(n_case)
-        np.random.shuffle(tidx)
-        comm_list = comm_list[tidx]
-        txt_list = txt_list[tidx]
-
-    # generate comm_list.sh
-    t_name0 = os.path.join(t_path, 'comm_list.sh')
-    with open(t_name0, 'w') as fcomm:
-        for i0, ts, f in zip(range(n_case), comm_list, txt_list):
-            fcomm.write('%s > std_output/%s.log 2> std_output/%s.err \n' % (ts, f, f))
-            fcomm.write('echo \'%d / %d, %s start.\'  \n\n' % (i0 + 1, n_case, f))
 
     assert callable(write_pbs_head000)
     if write_pbs_head000 is write_pbs_head:
@@ -574,11 +581,43 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
         run_fun = 'sbatch %s \n'
     else:
         raise ValueError('wrong write_pbs_head000')
+    return main_hostname, _parallel_pbs_use, run_fun
+
+
+def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
+                             write_pbs_head000=write_pbs_head, n_job_pbs=None,
+                             random_order=False, remote_path=None, case_folder=None):
+    PWD = os.getcwd()
+    comm_list = np.array(comm_list)
+    txt_list = np.array(txt_list)
+    t_path = os.path.join(PWD, job_dir) if case_folder is None else os.path.join(PWD, case_folder, job_dir)
+    if not os.path.exists(t_path):
+        os.makedirs(t_path)
+        print('make folder %s' % t_path)
+    else:
+        print('exist folder %s' % t_path)
+    n_case = len(comm_list)
+    if n_job_pbs is None:
+        n_job_pbs = use_node * njob_node
+    n_pbs = (n_case // n_job_pbs) + np.sign(n_case % n_job_pbs)
+    if random_order:
+        tidx = np.arange(n_case)
+        np.random.shuffle(tidx)
+        comm_list = comm_list[tidx]
+        txt_list = txt_list[tidx]
+    main_hostname, _parallel_pbs_use, run_fun = pbs_head_info(write_pbs_head000, use_node)
+
+    # generate comm_list.sh
+    t_name0 = os.path.join(t_path, 'comm_list.sh')
+    with open(t_name0, 'w') as fcomm:
+        for i0, ts, f in zip(range(n_case), comm_list, txt_list):
+            fcomm.write('%s > std_output/%s.log 2> std_output/%s.err \n' % (ts, f, f))
+            fcomm.write('echo \'%d / %d, %s start.\'  \n\n' % (i0 + 1, n_case, f))
 
     # generate .pbs file and .csh file
     t_name0 = os.path.join(t_path, 'main_run.sh')
     with open(t_name0, 'w') as frun:
-        _write_main_run_top(frun, main_hostname=main_hostname)
+        write_main_run_top(frun, main_hostname=main_hostname)
         # noinspection PyTypeChecker
         for t1 in np.arange(n_pbs, dtype='int'):
             use_comm = comm_list[t1 * n_job_pbs: np.min(((t1 + 1) * n_job_pbs, n_case))]
@@ -625,29 +664,33 @@ def write_main_run_comm_list(comm_list, txt_list, use_node, njob_node, job_dir,
     print('Command of first case is:')
     print(comm_list[0])
 
-    # generate upload and download scripts.
-    if remote_path is not None:
-        if write_pbs_head000 is write_slurm_head_v5_192:
-            scp_comm = 'papp_cloud scp -i ~/.ssh/scfa1057.id'
-            # rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -avzh --progress'
-            rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -z'
-            ssh_info = 'scfa1057@nc-e'
-        else:
-            raise ValueError('wrong write_pbs_head000 for remote_path')
-        remote_path = os.path.join(remote_path, job_dir)
-        upsh = os.path.join(t_path, 'upload.sh')
-        with open(upsh, 'w') as fup:
-            fup.write('%s ./ %s:%s\n' % (scp_comm, ssh_info, remote_path))
-        dnsh = os.path.join(t_path, 'download.sh')
-        with open(dnsh, 'w') as fup:
-            fup.write('RC=1\n')
-            fup.write('while [[ $RC -ne 0 ]]\n')
-            fup.write('do\n')
-            fup.write('   %s %s:%s/ ./\n'% (rsync_comm, ssh_info, remote_path))
-            fup.write('   RC=$?\n')
-            fup.write('   sleep 1\n')
-            fup.write('done\n')
-            fup.write('\n')
+    # # generate upload and download scripts.
+    # if remote_path is not None:
+    #     if write_pbs_head000 is write_slurm_head_v5_192:
+    #         scp_comm = 'papp_cloud scp -i ~/.ssh/scfa1057.id'
+    #         # rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -avzh --progress'
+    #         rsync_comm = 'papp_cloud rsync -i ~/.ssh/scfa1057.id -z'
+    #         ssh_info = 'scfa1057@nc-e'
+    #     else:
+    #         raise ValueError('wrong write_pbs_head000 for remote_path')
+    #     remote_path = os.path.join(remote_path, job_dir) if case_folder is None \
+    #         else os.path.join(remote_path, case_folder, job_dir)
+    #     upsh = os.path.join(t_path, 'upload.sh')
+    #     with open(upsh, 'w') as fup:
+    #         fup.write('%s ./ %s:%s\n' % (scp_comm, ssh_info, remote_path))
+    #         fup.write('echo \n')
+    #         fup.write('echo upload current folder to %s:%s\n\n' % (ssh_info, remote_path))
+    #     dnsh = os.path.join(t_path, 'download.sh')
+    #     with open(dnsh, 'w') as fup:
+    #         fup.write('RC=1\n')
+    #         fup.write('while [[ $RC -ne 0 ]]\n')
+    #         fup.write('do\n')
+    #         fup.write('   %s %s:%s/ ./\n' % (rsync_comm, ssh_info, remote_path))
+    #         fup.write('   RC=$?\n')
+    #         fup.write('   sleep 1\n')
+    #         fup.write('done\n')
+    #         fup.write('\n')
+    write_upload_download(remote_path, case_folder, job_dir, write_pbs_head000)
     return True
 
 
@@ -666,7 +709,8 @@ def write_myscript(job_name_list, job_dir):
 
 
 def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
-                         txt_list=None, local_hostname='JiUbuntu'):
+                         txt_list=None, local_hostname='JiUbuntu',
+                         remote_hostname=None, remote_path=None):
     PWD = os.getcwd()
     comm_list = np.array(comm_list)
     n_comm = comm_list.size
@@ -763,6 +807,47 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
     print('Random order mode is %s. ' % random_order)
     print('Command of first case is:')
     print(comm_list[0])
+
+    # generate upload and download scripts.
+    if remote_path is not None:
+        if remote_hostname == 'sxjqbddfzyj-01':
+            scp_comm = 'scp -r'
+            rsync_comm = 'rsync -avzh --progress'
+            ssh_info = 'zjlab@10.101.80.33'
+        elif remote_hostname == 'sxjqbddfzyj-02':
+            scp_comm = 'scp -r'
+            rsync_comm = 'rsync -avzh --progress'
+            ssh_info = 'zjlab@10.101.80.34'
+        elif remote_hostname == 'sxjqbddfzyj-03':
+            scp_comm = 'scp -r'
+            rsync_comm = 'rsync -avzh --progress'
+            ssh_info = 'zjlab@10.101.80.35'
+        elif remote_hostname == 'sxjqbddfzyj-04':
+            scp_comm = 'scp -r'
+            rsync_comm = 'rsync -avzh --progress'
+            ssh_info = 'zjlab@10.101.80.36'
+        elif remote_hostname == 'sxjqbddfzyj-05':
+            scp_comm = 'scp -r'
+            rsync_comm = 'rsync -avzh --progress'
+            ssh_info = 'zjlab@10.101.80.37'
+        else:
+            raise ValueError('wrong remote_hostname, current: %s' % remote_hostname)
+        remote_path = os.path.join(remote_path, job_dir)
+        upsh = os.path.join(t_path, 'upload.sh')
+        with open(upsh, 'w') as fup:
+            fup.write('%s $(pwd) %s:%s\n' % (scp_comm, ssh_info, remote_path))
+            fup.write('echo \n')
+            fup.write('echo upload current folder to %s:%s\n\n' % (ssh_info, remote_path))
+        dnsh = os.path.join(t_path, 'download.sh')
+        with open(dnsh, 'w') as fup:
+            fup.write('RC=1\n')
+            fup.write('while [[ $RC -ne 0 ]]\n')
+            fup.write('do\n')
+            fup.write('   %s %s:%s/ ./\n' % (rsync_comm, ssh_info, remote_path))
+            fup.write('   RC=$?\n')
+            fup.write('   sleep 1\n')
+            fup.write('done\n')
+            fup.write('\n')
     return True
 
 
@@ -814,3 +899,8 @@ def check_file_extension(filename, extension):
     if filename[-len(extension):] != extension:
         filename = filename + extension
     return filename
+
+
+def print_fullArray(t1):
+    with np.printoptions(threshold=np.inf):
+        print(t1)

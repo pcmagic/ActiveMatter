@@ -17,6 +17,7 @@ import time
 import shutil
 import os
 import h5py
+from matplotlib import pyplot as plt
 
 from act_src import baseClass
 from act_src import particleClass
@@ -77,6 +78,7 @@ class _baseProblem(baseClass.baseObj):
 
         # parameters for temporal evaluation.
         self._save_every = 1
+        self._do_save = True
         self._tqdm_fun = tqdm_fun
         self._tqdm = None
         self._update_fun = '3bs'  # funHandle and order
@@ -186,6 +188,14 @@ class _baseProblem(baseClass.baseObj):
     @save_every.setter
     def save_every(self, save_every):
         self._save_every = int(save_every)
+
+    @property
+    def do_save(self):
+        return self._do_save
+
+    @do_save.setter
+    def do_save(self, do_save):
+        self._do_save = bool(do_save)
 
     @property
     def tqdm_fun(self):
@@ -397,7 +407,7 @@ class _baseProblem(baseClass.baseObj):
         (rtol, atol) = self.update_order
         update_fun = self.update_fun
         tqdm_fun = self.tqdm_fun
-        self.t1 = t0
+        self.t0 = t0
         self.t1 = t1
         self.eval_dt = eval_dt
         self.max_it = max_it
@@ -458,15 +468,15 @@ class _baseProblem(baseClass.baseObj):
         return
 
     def _do_store_data(self, ts, i, t, Y):
-        if t > self.max_it:
-            return False
-        else:
+        if (t <= self.max_it) and self.do_save:
             dt = ts.getTimeStep()
             if self.rank0:
                 self.t_hist.append(t)
                 self.dt_hist.append(dt)
             self.update_hist()
             return True
+        else:
+            return False
 
     def _monitor(self, ts, i, t, Y):
         # i = ts.getStepNumber()  # number of steps completed so far.
@@ -490,24 +500,22 @@ class _baseProblem(baseClass.baseObj):
         if self.rank0:
             self.tqdm.update(100 - self.percentage)
             self.tqdm.close()
-            self._t_hist = np.hstack(self.t_hist)
-            self._dt_hist = np.hstack(self.dt_hist)
-        # i = ts.getStepNumber()
-        # t = ts.getTime()
-        # Y = ts.getSolution()
-        # self._do_store_data(ts, i, t, Y)
-
-        for obji in self.obj_list:  # type: particleClass._baseParticle
-            obji.update_finish()
-        for acti in self.action_list:  # type: interactionClass._baseAction
-            acti.update_finish()
-        self.relationHandle.check_self()
-
         time.sleep(0.1)
         spf.petscInfo(self.logger, 'Solve, finish time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         self._update_stop_time = datetime.now()
         spf.petscInfo(self.logger, 'Solve, usage time: %s' % str(self._update_stop_time - self._update_start_time))
         spf.petscInfo(self.logger, ' ')
+        return True
+
+    def pick_prepare(self):
+        if self.rank0:
+            self._t_hist = np.hstack(self.t_hist)
+            self._dt_hist = np.hstack(self.dt_hist)
+        for obji in self.obj_list:  # type: particleClass._baseParticle
+            obji.update_finish()
+        for acti in self.action_list:  # type: interactionClass._baseAction
+            acti.update_finish()
+        self.relationHandle.check_self()
         return True
 
     def _destroy_problem(self):
@@ -541,7 +549,7 @@ class _baseProblem(baseClass.baseObj):
         spf.petscInfo(self.logger, 'Empty problem hist: %s' % str(self))
         return True
 
-    def pickmyself(self, **kwargs):
+    def pick_myself(self, **kwargs):
         self.destroy_self()
 
         # dbg
@@ -692,11 +700,11 @@ class _base2DProblem(_baseProblem):
         #   Y = [X_all, phi_all]
         #   F = [U_all, W_all]
         X_all, phi_all = self.Y2Xphi(Y)
-        self.Xall, self.Phiall = X_all.reshape((-1, 2)), phi_all
+        self.Xall, self.Phiall = X_all.reshape((-1, self.dimension)), phi_all
         self.update_position()
         self.update_UWall(F)
         tF = self.vec_scatter(F)
-        self.Uall = tF[:self.dimension * self.n_obj].reshape((-1, 2))
+        self.Uall = tF[:self.dimension * self.n_obj].reshape((-1, self.dimension))
         self.Wall = tF[self.dimension * self.n_obj:]
         self.update_velocity()
         # F.assemble()
@@ -708,6 +716,28 @@ class _base2DProblem(_baseProblem):
         # spf.petscInfo(self.logger, '%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
         #     F.getArray()[0], F.getArray()[1], F.getArray()[2],
         #     F.getArray()[3], F.getArray()[4], F.getArray()[5], ))
+        return True
+
+    def show_particle_location(self):
+        if self.rank0:
+            figsize, dpi = np.array((1, 1)) * 3, 200
+
+            fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+            fig.patch.set_facecolor('white')
+            axi.plot(self.Xall[:, 0], self.Xall[:, 1], '.')
+            plt.show()
+        return True
+
+    def show_particle_directon(self):
+        if self.rank0:
+            figsize, dpi = np.array((1, 1)) * 3, 200
+            fct = 0.2
+
+            fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+            fig.patch.set_facecolor('white')
+            axi.quiver(self.Xall[:, 0], self.Xall[:, 1],
+                       fct * np.cos(self.Phiall), fct * np.sin(self.Phiall))
+            plt.show()
         return True
 
 

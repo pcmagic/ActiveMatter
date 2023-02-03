@@ -19,6 +19,7 @@ from tqdm.notebook import tqdm as tqdm_notebook
 # import pickle
 import warnings
 from petsc4py import PETSc
+# from scipy import sparse
 
 import matplotlib
 from matplotlib import animation
@@ -27,12 +28,12 @@ from matplotlib.ticker import Locator
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.proj3d import proj_transform
 from mpl_toolkits.mplot3d.axes3d import Axes3D
-from matplotlib.colors import Normalize, ListedColormap, LogNorm
+from matplotlib.colors import Normalize, ListedColormap, LogNorm, LinearSegmentedColormap
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, HPacker, VPacker
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 # from mpl_toolkits.axes_grid1 import colorbar
-# from matplotlib import colorbar
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes  # , zoomed_inset_axes
 # import matplotlib.ticker as mtick
 # from matplotlib import colors as mcolors
@@ -50,9 +51,10 @@ PWD = os.getcwd()
 np.set_printoptions(linewidth=110, precision=5)
 
 params = {
-    'animation.html': 'html5',
-    'font.family':    'sans-serif',
-    'font.size':      15,
+    'animation.html':        'html5',
+    'animation.embed_limit': 2 ** 128,
+    'font.family':           'sans-serif',
+    'font.size':             15,
 }
 preamble = r' '
 preamble = preamble + '\\usepackage{bm} '
@@ -98,7 +100,6 @@ def set_axes_equal(ax, rad_fct=0.5):
             ax.get_xlim(),
             ax.get_ylim(),
         ])
-
         origin = np.mean(limits, axis=1)
         radius = rad_fct * np.max(np.abs(limits[:, 1] - limits[:, 0]))
         radius_x = l1 / lmax * radius
@@ -567,6 +568,18 @@ def RBGColormap(color: np.asarray, ifcheck=True):
     return newcmp
 
 
+def twilight_diverging():
+    colors = plt.get_cmap('twilight_shifted')(np.linspace(0.2, 0.8, 256))
+    cmap = LinearSegmentedColormap.from_list('my_colormap', colors)
+    return cmap
+
+
+def binary_diverging():
+    colors = plt.get_cmap('binary')(np.linspace(0.2, 1, 256))
+    cmap = LinearSegmentedColormap.from_list('my_colormap', colors)
+    return cmap
+
+
 class Arrow3D(FancyArrowPatch):
     def __init__(self, x, y, z, dx, dy, dz, *args, **kwargs):
         super().__init__((0, 0), (0, 0), *args, **kwargs)
@@ -595,8 +608,9 @@ def resampling_data(t, X, resampling_fct=2, t_use=None, interp1d_kind='quadratic
     if t_use is None:
         t_use = np.linspace(t.min(), t.max(), int(t.size * resampling_fct))
     else:
-        war_msg = 'size of t_use is %d, resampling_fct is IGNORED' % t_use.size
-        warnings.warn(war_msg)
+        if resampling_fct is not None:
+            war_msg = 'size of t_use is %d, resampling_fct is IGNORED' % t_use.size
+            warnings.warn(war_msg)
 
     intp_fun1d = interpolate.interp1d(t, X, kind=interp1d_kind, copy=False, axis=0,
                                       bounds_error=True)
@@ -613,14 +627,14 @@ def get_increase_angle(ty1):
     return ty
 
 
-def get_continue_angle(tx, ty1, t_use=None):
+def get_continue_angle(tx, ty1, t_use=None, interp1d_kind='quadratic'):
     if t_use is None:
         t_use = np.linspace(tx.min(), tx.max(), 2 * tx.size)
     if np.array(t_use).size == 1:
         t_use = np.linspace(tx.min(), tx.max(), t_use * tx.size)
 
     ty = get_increase_angle(ty1)
-    intp_fun1d = interpolate.interp1d(tx, ty, kind='quadratic', copy=False, axis=0,
+    intp_fun1d = interpolate.interp1d(tx, ty, kind=interp1d_kind, copy=False, axis=0,
                                       bounds_error=True)
     ty = intp_fun1d(t_use) % (2 * np.pi)
     ty[ty > np.pi] = ty[ty > np.pi] - 2 * np.pi
@@ -643,6 +657,17 @@ def separate_idx(ty, spt_fct=0.5):
     return np.vstack((t1[:-1] + 1, t1[1:])).T
 
 
+def moving_avg(y0, avg_stp):
+    weights = np.ones(avg_stp) / avg_stp
+    y1 = np.convolve(weights, y0, mode='same')
+    avg_stpD2 = avg_stp // 2
+    for i0 in np.arange(avg_stpD2):
+        y1[i0] = y1[i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        y1[i1] = y1[i1] / (avg_stpD2 + i0 + 1) * avg_stp
+    return y1
+
+
 def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=50, resampling_fct=2,
                    interp1d_kind='quadratic', tmin=-np.inf, tmax=np.inf, plt_range=None, t0_marker='s'):
     # percentage = 0
@@ -656,8 +681,9 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
         return line_list
 
     tidx = (t >= tmin) * (t <= tmax)
+    t_use = np.linspace(t.min(), t.max(), int(t.size * resampling_fct))
     data_list = np.array([resampling_data(t[tidx], obji.X_hist[tidx], resampling_fct=resampling_fct,
-                                          interp1d_kind=interp1d_kind)
+                                          interp1d_kind=interp1d_kind, t_use=t_use)
                           for obji in obj_list])
     data_max = data_list.max(axis=0).max(axis=0)
     data_min = data_list.min(axis=0).min(axis=0)
@@ -672,7 +698,7 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
     axi.set_xlim([data_mid[0] - plt_range, data_mid[0] + plt_range])
     axi.set_ylabel('$x_2$')
     axi.set_ylim([data_mid[1] - plt_range, data_mid[1] + plt_range])
-
+    #
     [axi.plot(obji.X_hist[tidx, 0], obji.X_hist[tidx, 1], linestyle='None', ) for obji in obj_list]
     [axi.scatter(obji.X_hist[tidx, 0][0], obji.X_hist[tidx, 1][0], color='k', marker=t0_marker) for obji in obj_list]
     axi.axis('equal')
@@ -693,6 +719,315 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
                                    fargs=(line_list, data_list), )
     # tqdm_fun.update(100 - percentage)
     # tqdm_fun.close()
+    return anim
+
+
+def make2D_Xomega_video(problem: 'problemClass._base2DProblem',
+                        figsize=np.array((9.2, 9)) * 1, dpi=100,
+                        plt_tmin=-np.inf, plt_tmax=np.inf,
+                        stp=1, interval=50,
+                        resampling_fct=1, interp1d_kind='quadratic',
+                        vmin=None, vmax=None, norm=None,
+                        cmap=plt.get_cmap('viridis'), tavr=1,
+                        plt_range=None, ):
+    def update_fun(num, scat, title, data_list, avg_all, t_plot, cax):
+        num = num * stp
+        tqdm_fun.update(1)
+        scat.set_offsets(data_list[:, num, :])
+        scat.set_array(avg_all[:, num])
+        title.set_text(title_fmt % (num, t_plot[num]))
+        # clb = fig.colorbar(scat, cax=cax)
+        # clb.ax.set_title('$\\varphi / \\pi$')
+        return scat
+
+    t = problem.t_hist
+    tidx = (t >= plt_tmin) * (t <= plt_tmax)
+    tidx[0] = False
+    obj_list = problem.obj_list
+    marker = 'o'
+    title_fmt = '$ | \\langle \\dot{\\varphi} \\rangle | $, idx=%08d, t=%10.4f'
+
+    ax_title = 1
+    t_plot, avg_all = cal_avrPhaseVelocity(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax, tavr=tavr,
+                                           resampling_fct=resampling_fct, interp1d_kind=interp1d_kind, )
+    # sort_idx = np.argsort(np.mean(avg_all[:, t_plot > t_plot.max() / 2], axis=-1))
+    if norm is None:
+        vmin = avg_all.min() if vmin is None else vmin
+        vmax = avg_all.max() if vmax is None else vmax
+        print('norm in range (%f, %f)' % (vmin, vmax))
+        norm = Normalize(vmin=vmin, vmax=vmax)
+    else:
+        if (vmin is not None) or (vmax is not None):
+            war_msg = 'ignore parameters vmin and vmax. '
+            warnings.warn(war_msg)
+    #
+    data_list = np.array([resampling_data(t[tidx], obji.X_hist[tidx], interp1d_kind=interp1d_kind,
+                                          resampling_fct=None, t_use=t_plot)
+                          for obji in obj_list])
+    data_max = data_list.max(axis=0).max(axis=0)
+    data_min = data_list.min(axis=0).min(axis=0)
+    data_mid = (data_max + data_min) / 2
+    if plt_range is None:
+        plt_range = np.max(data_max - data_min)
+    print('plt_range is', plt_range)
+    # # dbg
+    # print('dbg', data_list.shape, avg_all.shape)
+
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    crt_idx = 0
+    # cax = inset_axes(axi, width="5%", height="90%", bbox_to_anchor=(0.08, 0, 1, 1),
+    #                  loc='right', bbox_transform=axi.transAxes, borderpad=0, )
+    cax = make_axes_locatable(axi).append_axes('right', '5%', '5%')
+    axi.set_xlabel('$x_1$')
+    axi.set_xlim([data_mid[0] - plt_range, data_mid[0] + plt_range])
+    axi.set_ylabel('$x_2$')
+    axi.set_ylim([data_mid[1] - plt_range, data_mid[1] + plt_range])
+    ax_title = title_fmt % (crt_idx, t_plot[crt_idx])
+    axi.set_title("   ")
+    axi.axis('equal')
+    scat = axi.scatter(data_list[:, crt_idx, 0], data_list[:, crt_idx, 1], c=avg_all[:, crt_idx],
+                       marker=marker, cmap=cmap, norm=norm)
+    clb = fig.colorbar(scat, cax=cax)
+    # clb.ax.set_title('$ | \\langle \\dot{\\varphi} \\rangle | $', fontsize='small')
+    title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
+                                             'edgecolor': (0, 0, 0, 0),
+                                             'pad':       5},
+                     transform=axi.transAxes, ha="center", va='bottom')
+
+    frames = t_plot.size // stp
+    tqdm_fun = tqdm_notebook(total=frames + 2)
+    anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
+                                   fargs=(scat, title, data_list, avg_all, t_plot, cax), )
+    return anim
+
+
+def make2D_Xphi_video(problem: 'problemClass._base2DProblem',
+                      figsize=np.array((9.2, 9)) * 1, dpi=100,
+                      plt_tmin=-np.inf, plt_tmax=np.inf,
+                      stp=1, interval=50,
+                      resampling_fct=1, interp1d_kind='quadratic',
+                      cmap=plt.get_cmap('viridis'),
+                      plt_range=None, ):
+    assert resampling_fct is None
+    print('dbg, resampling_fct of current method is prohibit. ')
+
+    def update_fun(num, scat, title, data_list, phi_list, t_plot, cax):
+        num = num * stp
+        tqdm_fun.update(1)
+        scat.set_offsets(data_list[:, num, :])
+        scat.set_array(phi_list[:, num] / np.pi)
+        title.set_text(title_fmt % (num, t_plot[num]))
+        # clb = fig.colorbar(scat, cax=cax)
+        # clb.ax.set_title('$\\varphi / \\pi$')
+        return scat
+
+    t = problem.t_hist
+    tidx = (t >= plt_tmin) * (t <= plt_tmax)
+    tidx[0] = False
+    obj_list = problem.obj_list
+    marker = 'o'
+    title_fmt = '$\\varphi / \\pi$, idx=%08d, t=%10.4f'
+
+    # t_plot, W_avg, phi_list = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+    #                                      resampling_fct=1, interp1d_kind=interp1d_kind,
+    #                                      tavr=0.001)
+    t_plot = problem.t_hist[tidx]
+    phi_list = np.array([obji.phi_hist[tidx] for obji in obj_list])
+    print(phi_list.max() / np.pi, phi_list.min() / np.pi, )
+    vmin, vmax = -1, 1
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    #
+    # data_list = np.array([resampling_data(t[tidx], obji.X_hist[tidx], interp1d_kind=interp1d_kind,
+    #                                       resampling_fct=None, t_use=t_plot)
+    #                       for obji in obj_list])
+    data_list = np.array([obji.X_hist[tidx] for obji in obj_list])
+    data_max = data_list.max(axis=0).max(axis=0)
+    data_min = data_list.min(axis=0).min(axis=0)
+    data_mid = (data_max + data_min) / 2
+    if plt_range is None:
+        plt_range = np.max(data_max - data_min)
+    print('plt_range is', plt_range)
+    # # dbg
+    # print('dbg', data_list.shape, avg_all.shape)
+
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    crt_idx = 0
+    # cax = inset_axes(axi, width="5%", height="90%", bbox_to_anchor=(0.08, 0, 1, 1),
+    #                  loc='right', bbox_transform=axi.transAxes, borderpad=0, )
+    cax = make_axes_locatable(axi).append_axes('right', '5%', '5%')
+    axi.set_xlabel('$x_1$')
+    axi.set_xlim([data_mid[0] - plt_range, data_mid[0] + plt_range])
+    axi.set_ylabel('$x_2$')
+    axi.set_ylim([data_mid[1] - plt_range, data_mid[1] + plt_range])
+    ax_title = title_fmt % (crt_idx, t_plot[crt_idx])
+    axi.set_title("   ")
+    axi.axis('equal')
+    scat = axi.scatter(data_list[:, crt_idx, 0], data_list[:, crt_idx, 1], c=phi_list[:, crt_idx] / np.pi,
+                       marker=marker, cmap=cmap, norm=norm)
+    clb = fig.colorbar(scat, cax=cax)
+    # clb.ax.set_title('$\\varphi / \\pi$', fontsize='small')
+    title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
+                                             'edgecolor': (0, 0, 0, 0),
+                                             'pad':       5},
+                     transform=axi.transAxes, ha="center", va='bottom')
+
+    frames = t_plot.size // stp
+    tqdm_fun = tqdm_notebook(total=frames + 2)
+    anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
+                                   fargs=(scat, title, data_list, phi_list, t_plot, cax), )
+    return anim
+
+
+# def dbg_make2D_Xphi_video(problem: 'problemClass._base2DProblem',
+#                           figsize=np.array((9.2, 9)) * 1, dpi=100,
+#                           plt_tmin=-np.inf, plt_tmax=np.inf,
+#                           stp=1, interval=50,
+#                           resampling_fct=1, interp1d_kind='quadratic',
+#                           cmap=plt.get_cmap('viridis'),
+#                           plt_range=None, ):
+#     assert resampling_fct is None
+#     print('dbg, resampling_fct of current method is prohibit. ')
+#
+#     t = problem.t_hist
+#     tidx = (t >= plt_tmin) * (t <= plt_tmax)
+#     tidx[0] = False
+#     obj_list = problem.obj_list
+#     marker = 'o'
+#     anim_name = problem.name
+#
+#     # t_plot, W_avg, phi_list = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+#     #                                      resampling_fct=1, interp1d_kind=interp1d_kind,
+#     #                                      tavr=0.001)
+#     t_plot = problem.t_hist[tidx]
+#     phi_list = np.array([obji.phi_hist[tidx] for obji in obj_list])
+#     print(phi_list.max() / np.pi, phi_list.min() / np.pi, phi_list.shape)
+#     vmin, vmax = -1, 1
+#     norm = Normalize(vmin=vmin, vmax=vmax)
+#     #
+#     # data_list = np.array([resampling_data(t[tidx], obji.X_hist[tidx], interp1d_kind=interp1d_kind,
+#     #                                       resampling_fct=None, t_use=t_plot)
+#     #                       for obji in obj_list])
+#     data_list = np.array([obji.X_hist[tidx] for obji in obj_list])
+#     data_max = data_list.max(axis=0).max(axis=0)
+#     data_min = data_list.min(axis=0).min(axis=0)
+#     data_mid = (data_max + data_min) / 2
+#     if plt_range is None:
+#         plt_range = np.max(data_max - data_min)
+#     print('plt_range is', plt_range)
+#     # # dbg
+#     # print('dbg', data_list.shape, avg_all.shape)
+#
+#     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+#     fig.patch.set_facecolor('white')
+#     cax = make_axes_locatable(axi).append_axes('right', '5%', '5%')
+#     # cax = inset_axes(axi, width="5%", height="90%", bbox_to_anchor=(0.08, 0, 1, 1),
+#     #                  loc='right', bbox_transform=axi.transAxes, borderpad=0, )
+#     axi.set_xlabel('$x_1$')
+#     axi.set_xlim([data_mid[0] - plt_range, data_mid[0] + plt_range])
+#     axi.set_ylabel('$x_2$')
+#     axi.set_ylim([data_mid[1] - plt_range, data_mid[1] + plt_range])
+#     axi.set_title('  ')
+#     axi.axis('equal')
+#     for i0 in tqdm_notebook(np.arange(0, phi_list.shape[1], stp)):
+#         ax_title = '$\\varphi / \\pi$, idx=%04d, t=%f' % (i0, t_plot[i0])
+#         axi.set_title(ax_title)
+#         scat = axi.scatter(data_list[:, i0, 0], data_list[:, i0, 1], c=phi_list[:, i0] / np.pi,
+#                            marker=marker, cmap=cmap, norm=norm)
+#         clb = fig.colorbar(scat, cax=cax)
+#         # clb.ax.set_title(ax_title, fontsize='small')
+#         filename = os.path.join(PWD, 'animation', 'dbg', '%s_%04d.png' % (anim_name, i0))
+#         fig.savefig(fname=filename, dpi=dpi)
+#         plt.sca(axi)
+#         plt.cla()
+#         plt.sca(cax)
+#         plt.cla()
+#     return True
+
+
+def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
+                           figsize=np.array((11, 9)) * 0.5, dpi=100,
+                           plt_tmin=-np.inf, plt_tmax=np.inf,
+                           stp=1, interval=50,
+                           resampling_fct=1, interp1d_kind='quadratic',
+                           vmin=None, vmax=None, norm=None,
+                           cmap=plt.get_cmap('viridis'), tavr=1,
+                           plt_range=None, ):
+    assert resampling_fct is None
+    print('dbg, resampling_fct of current method is prohibit. ')
+
+    def update_fun(num, qr, title, phi_list, W_list, data_list, t_plot):
+        num = num * stp
+        tqdm_fun.update(1)
+        qr.set_offsets(data_list[:, num, :])
+        qr.set_UVC(np.cos(phi_list[:, num]), np.sin(phi_list[:, num]), W_list[:, num])
+        title.set_text(title_fmt % (num, t_plot[num]))
+        return True
+
+    t = problem.t_hist
+    tidx = (t >= plt_tmin) * (t <= plt_tmax)
+    tidx[0] = False
+    obj_list = problem.obj_list
+    title_fmt = '$ | \\langle \\dot{\\varphi} \\rangle | $, idx=%08d, t=%10.4f'
+    t_plot = problem.t_hist[tidx]
+    dt_res = np.mean(np.diff(t_plot))
+    avg_stp = np.ceil(tavr / dt_res).astype('int')
+    avg_stpD2 = avg_stp // 2
+    weights = np.ones(avg_stp) / avg_stp
+    err_msg = 'tavr <= %f, current: %f' % (t_plot.max() - t_plot.min(), tavr)
+    assert avg_stp <= t_plot.size, err_msg
+
+    phi_list = np.array([obji.phi_hist[tidx] for obji in obj_list])
+    W_list = np.abs(np.array([np.convolve(weights, obji.W_hist[1:], mode='same') for obji in obj_list]))
+    for i0 in np.arange(avg_stpD2):
+        W_list[:, i0] = W_list[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        W_list[:, i1] = W_list[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+    W_list = W_list[:, tidx[1:]]
+    data_list = np.array([obji.X_hist[tidx] for obji in obj_list])
+    data_max = data_list.max(axis=0).max(axis=0)
+    data_min = data_list.min(axis=0).min(axis=0)
+    data_mid = (data_max + data_min) / 2
+    #
+    if norm is None:
+        vmin = W_list.min() if vmin is None else vmin
+        vmax = W_list.max() if vmax is None else vmax
+        print('norm in range (%f, %f)' % (vmin, vmax))
+        norm = Normalize(vmin=vmin, vmax=vmax)
+    else:
+        if (vmin is not None) or (vmax is not None):
+            war_msg = 'ignore parameters vmin and vmax. '
+            warnings.warn(war_msg)
+    #
+    if plt_range is None:
+        plt_range = np.max(data_max - data_min)
+        print('plt_range is', plt_range)
+
+    fig, (axi, cax) = plt.subplots(nrows=1, ncols=2, figsize=figsize, dpi=dpi, constrained_layout=True,
+                                   gridspec_kw={'width_ratios': [10, 1]})
+    fig.patch.set_facecolor('white')
+    crt_idx = 0
+    axi.set_xlabel('$x_1$')
+    axi.set_ylabel('$x_2$')
+    axi.plot(np.ones(2) * data_mid[0], [data_mid[1] - plt_range / 2, data_mid[1] + plt_range / 2], ' ')
+    axi.plot([data_mid[0] - plt_range / 2, data_mid[0] + plt_range / 2], np.ones(2) * data_mid[1], ' ')
+    axi.set_title("   ")
+    qr = axi.quiver(data_list[:, crt_idx, 0], data_list[:, crt_idx, 1],
+                    np.cos(phi_list[:, crt_idx]), np.sin(phi_list[:, crt_idx]),
+                    W_list[:, crt_idx], cmap=cmap, norm=norm)
+    fig.colorbar(qr, cax=cax)
+    ax_title = title_fmt % (crt_idx, t_plot[crt_idx])
+    title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
+                                             'edgecolor': (0, 0, 0, 0),
+                                             'pad':       5},
+                     transform=axi.transAxes, ha="center", va='bottom')
+    axi.axis('equal')
+
+    frames = t_plot.size // stp
+    tqdm_fun = tqdm_notebook(total=frames + 2)
+    anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
+                                   fargs=(qr, title, phi_list, W_list, data_list, t_plot), )
     return anim
 
 
@@ -742,18 +1077,18 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
     return True
 
 
-def _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx, plt_full_obj):
+def _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx, range_full_obj):
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     tidx = (problem.t_hist >= plt_tmin) * (problem.t_hist <= plt_tmax)
     if show_idx is None:
         show_idx = np.arange(problem.n_obj)
-    show_idx = np.array(show_idx)
+    show_idx = np.array((show_idx,)).ravel()
     err_msg = 'wrong parameter show_idx: %s' % str(show_idx)
     assert show_idx.max() < problem.n_obj, err_msg
     assert np.all([np.issubdtype(i0, np.integer) for i0 in show_idx]), err_msg
     show_list = problem.obj_list[show_idx]
-    range_list = problem.obj_list if plt_full_obj else show_list
+    range_list = problem.obj_list if range_full_obj else show_list
     # print('dbg range_list', range_list)
     return tidx, show_list, range_list, fig, axi
 
@@ -803,21 +1138,26 @@ def _core_X2D_fun(problem: 'problemClass._base2DProblem', line_fun, show_idx=Non
                   figsize=np.array((50, 50)) * 5, dpi=100, plt_tmin=-np.inf, plt_tmax=np.inf,
                   resampling_fct=None, interp1d_kind='quadratic',
                   t0_marker='s', cmap=plt.get_cmap('brg'),
-                  plt_full_obj=True, plt_full_time=True, **line_fun_kwargs):
-    _ = _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx, plt_full_obj)
+                  range_full_obj=True, plt_full_time=True, **line_fun_kwargs):
+    _ = _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx, range_full_obj)
     tidx, show_list, range_list, fig, axi = _
     if np.any(tidx):
         # plot
         for obji in show_list:
             line_fun(obji, tidx, axi, cmap, t0_marker, interp1d_kind, resampling_fct, **line_fun_kwargs)
         # set range
-        tidx = np.ones_like(tidx) if plt_full_time else tidx
+        if plt_full_time:
+            tidx = np.ones_like(tidx)
+            tidx[:1] = 0
         Xmax = np.array([obji.X_hist[tidx].max(axis=0) for obji in range_list]).max(axis=0)
         Xmin = np.array([obji.X_hist[tidx].min(axis=0) for obji in range_list]).min(axis=0)
         Xrng = (Xmax - Xmin).max() * 0.55
         Xmid = (Xmax + Xmin) / 2
         axi.set_xlim(Xmid[0] - Xrng, Xmid[0] + Xrng)
         axi.set_ylim(Xmid[1] - Xrng, Xmid[1] + Xrng)
+        axi.set_xlabel('$x_1$')
+        axi.set_ylabel('$x_2$')
+        # print(Xmin, Xmax, Xrng, Xmid)
         # # set_axes_equal(axi)
     else:
         logger = problem.logger
@@ -837,7 +1177,7 @@ def core_segments2D(*args, **kwargs):
 def cal_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
                          t_tmin=-np.inf, t_tmax=np.inf,
                          resampling_fct=1, interp1d_kind='quadratic',
-                         tavr=1):
+                         tavr=1, npabs=True):
     tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
     if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
         tidx[0] = False
@@ -845,12 +1185,15 @@ def cal_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
     t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
     avg_stp = np.ceil(tavr / dt_res).astype('int')
     weights = np.ones(avg_stp) / avg_stp
+    err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
+    assert avg_stp <= t_use.size, err_msg
 
     avg_all = []
     for obji in problem.obj_list:  # type:particleClass.particle2D
         W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
         avg_all.append(np.convolve(weights, W_hist, mode='same'))
-    avg_all = np.abs(np.vstack(avg_all))
+    # avg_all = np.abs(np.vstack(avg_all))
+    avg_all = np.abs(np.vstack(avg_all)) if npabs else np.vstack(avg_all)
     avg_stpD2 = avg_stp // 2
     for i0 in np.arange(avg_stpD2):
         avg_all[:, i0] = avg_all[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
@@ -859,10 +1202,10 @@ def cal_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
     return t_use, avg_all
 
 
-def cal_avrInfo(problem: 'problemClass._base2DProblem',
-                t_tmin=-np.inf, t_tmax=np.inf,
-                resampling_fct=1, interp1d_kind='quadratic',
-                tavr=1):
+def cal_avrInfo_raw(problem: 'problemClass._base2DProblem',
+                    t_tmin=-np.inf, t_tmax=np.inf,
+                    resampling_fct=1, interp1d_kind='quadratic',
+                    tavr=1, npabs=True):
     tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
     if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
         tidx[0] = False
@@ -879,77 +1222,230 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
         phi_hist = get_continue_angle(t_hist, obji.phi_hist[tidx], t_use=t_use)
         W_avg.append(np.convolve(weights, W_hist, mode='same'))
         phi_avg.append(np.convolve(weights, phi_hist, mode='same'))
-    W_avg = np.abs(np.vstack(W_avg))
+    W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
     phi_avg = np.vstack(phi_avg)
+    avg_stpD2 = avg_stp // 2
+    for i0 in np.arange(avg_stpD2):
+        W_avg[:, i0] = W_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        phi_avg[:, i0] = phi_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        W_avg[:, i1] = W_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+        phi_avg[:, i1] = phi_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
     return t_return, W_avg, phi_avg
 
 
-def core_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
+def cal_avrInfo(problem: 'problemClass._base2DProblem',
+                t_tmin=-np.inf, t_tmax=np.inf,
+                resampling_fct=1, interp1d_kind='quadratic',
+                tavr=1, npabs=True):
+    tidx = problem.t_hist < np.inf
+    if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
+    avg_stp = np.ceil(tavr / dt_res).astype('int')
+    weights = np.ones(avg_stp) / avg_stp
+    err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
+    assert avg_stp <= t_use.size, err_msg
+
+    W_avg = []
+    phi_avg = []
+    for obji in problem.obj_list:  # type:particleClass.particle2D
+        W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
+        phi_hist = get_continue_angle(t_hist, obji.phi_hist[tidx], t_use=t_use)
+        W_avg.append(np.convolve(weights, W_hist, mode='same'))
+        phi_avg.append(np.convolve(weights, phi_hist, mode='same'))
+    W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
+    phi_avg = np.vstack(phi_avg)
+    avg_stpD2 = avg_stp // 2
+    for i0 in np.arange(avg_stpD2):
+        W_avg[:, i0] = W_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        phi_avg[:, i0] = phi_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        W_avg[:, i1] = W_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+        phi_avg[:, i1] = phi_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+
+    tidx = (t_use >= t_tmin) * (t_use <= t_tmax)
+    t_use = t_use[tidx]
+    W_avg = W_avg[:, tidx]
+    phi_avg = phi_avg[:, tidx]
+    return t_use, W_avg, phi_avg
+
+
+def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
                           figsize=np.array((50, 50)) * 5, dpi=100,
                           plt_tmin=-np.inf, plt_tmax=np.inf,
                           resampling_fct=1, interp1d_kind='quadratic',
-                          vmin=None, vmax=None,
-                          norm=None,
-                          cmap=plt.get_cmap('bwr'), tavr=1):
-    # _ = _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx=None, plt_full_obj=True)
-    # tidx, show_list, range_list, fig, axi = _
-    # if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
-    #     tidx[0] = False
-    # t_hist = problem.t_hist[tidx]
-    # t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
-    # avg_stp = np.ceil(tavr / dt_res).astype('int')
-    # idx_min = 0
-    # idx_max = (t_use.size // avg_stp) * avg_stp + idx_min
-    # t_plot = np.mean(t_use[idx_min:idx_max].reshape((-1, avg_stp)), axis=-1)
-    #
-    # avg_all = []
-    # for obji in show_list:  # type:particleClass.particle2D
-    #     W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
-    #     avg_all.append(np.mean(W_hist[idx_min:idx_max].reshape((-1, avg_stp)), axis=-1))
-    # avg_all = np.vstack(avg_all)
-
-    t_plot, avg_all = cal_avrPhaseVelocity(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
-                                           resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
-                                           tavr=tavr)
-    sort_idx = np.argsort(np.mean(avg_all[:, t_plot > t_plot.max() / 2], axis=-1))
+                          vmin=0, vmax=1, cmap=plt.get_cmap('bwr'), tavr=1, npabs=True,
+                          sort_idx=None):
+    align = problem.align
+    t_plot, W_avg, _ = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                   resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                   tavr=tavr, npabs=npabs)
+    sort_idx = np.argsort(np.mean(W_avg[:, t_plot > t_plot.max() / 2], axis=-1)) \
+        if sort_idx is None else sort_idx
 
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
-    # if avg_all.min() * avg_all.max() < 0:
-    #     norm = midLinearNorm(midpoint=0, vmin=avg_all.min(), vmax=avg_all.max())
-    # else:
-    #     norm = Normalize(vmin=avg_all.min(), vmax=avg_all.max())
-    if norm is None:
-        vmin = avg_all.min() if vmin is None else vmin
-        vmax = avg_all.max() if vmax is None else vmax
-        print('norm in range (%f, %f)' % (vmin, vmax))
-        norm = Normalize(vmin=vmin, vmax=vmax)
-    else:
-        print('ignore parameters vmin and vmax. ')
-    # norm = LogNorm(vmin=vmin, vmax=vmax)
-    obj_idx = np.arange(1, problem.n_obj + 1)
-    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
-    c = axi.pcolorfast(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm)
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    c = axi.pcolorfast(t_plot, obj_idx, W_avg[sort_idx, :] / align, cmap=cmap, norm=norm)
     clb = fig.colorbar(c, ax=axi)
-    clb.ax.set_title('$ | \\langle \\dot{\\phi} \\rangle | $', fontsize='small')
+    if tavr > problem.eval_dt:
+        if npabs:
+            clb.ax.set_title('$\\langle | \\delta \\varphi | \\rangle / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$ \\langle \\delta \\varphi \\rangle / \\sigma $', fontsize='small')
+    else:
+        if npabs:
+            clb.ax.set_title('$| \\delta \\varphi | / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$\\delta \\varphi / \\sigma $', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_title('$\\sigma = %20.10f$' % align)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    return fig, axi
+
+
+def core_avrPhase(problem: 'problemClass._base2DProblem',
+                  figsize=np.array((50, 50)) * 5, dpi=100,
+                  plt_tmin=-np.inf, plt_tmax=np.inf,
+                  resampling_fct=1, interp1d_kind='quadratic',
+                  cmap=plt.get_cmap('bwr'), tavr=1,
+                  sort_type='normal', sort_idx=None):
+    sort_dict = {'normal':    lambda: np.argsort(np.mean(W_avg[:, t_plot > t_plot.max() / 2], axis=-1)),
+                 'traveling': lambda: np.argsort(phi_avg[:, -1])}
+    t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                         resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                         tavr=tavr)
+    try:
+        sort_idx = sort_dict[sort_type]() if sort_idx is None else sort_idx
+    except:
+        raise ValueError('wrong sort_type, current: %s, accept: %s' % (sort_type, sort_dict.keys()))
+
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+
+    vmin, vmax = -1, 1
+    norm = Normalize(vmin=vmin, vmax=vmax)
+
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
+    c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx, :] / np.pi, cmap=cmap, norm=norm)
+    clb = fig.colorbar(c, ax=axi)
+    clb.ax.set_title('$\\varphi / \\pi$', fontsize='small')
     axi.set_xlabel('$t$')
     axi.set_ylabel('index')
     axi.set_xlim(t_plot.min(), t_plot.max())
     axi.set_ylim(1, problem.n_obj)
-
-    # # dbg
-    print(t_plot.shape, np.arange(problem.n_obj).shape, avg_all.shape)
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+        axi.set_title('$\\sigma = %20.10f$' % align)
     return fig, axi
 
 
 def cal_polar_order(problem: 'problemClass._base2DProblem',
-                    t_tmin=-np.inf, t_tmax=np.inf, ):
+                    t_tmin=-np.inf, t_tmax=np.inf, show_idx=None):
     tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
     if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
         tidx[0] = False
     t_hist = problem.t_hist[tidx]
+    if show_idx is None:
+        show_idx = np.arange(problem.n_obj)
 
     cplx_R = np.mean(np.array([(np.cos(tobj.phi_hist[tidx]), np.sin(tobj.phi_hist[tidx]))
-                               for tobj in problem.obj_list]), axis=0).T
+                               for tobj in problem.obj_list[show_idx]]), axis=0).T
     # avg_all = np.vstack(avg_all)
     return t_hist, cplx_R
+
+
+def cal_polar_order_chimera(problem: 'problemClass._base2DProblem',
+                            t_tmin=-np.inf, t_tmax=np.inf, npabs=True,
+                            w_Range=(-np.inf, np.inf),
+                            resampling_fct=1, interp1d_kind='quadratic', tavr=1, ):
+    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
+    avg_stp = np.ceil(tavr / dt_res).astype('int')
+    weights = np.ones(avg_stp) / avg_stp
+    err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
+    assert avg_stp <= t_use.size, err_msg
+
+    W_avg = []
+    phi_hst = []
+    for obji in problem.obj_list:  # type:particleClass.particle2D
+        W_avg.append(np.convolve(weights,
+                                 interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use),
+                                 mode='same'))
+        phi_hst.append(get_continue_angle(t_hist, obji.phi_hist[tidx], t_use=t_use))
+    W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
+    avg_stpD2 = avg_stp // 2
+    for i0 in np.arange(avg_stpD2):
+        W_avg[:, i0] = W_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        W_avg[:, i1] = W_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+    phi_hst = np.vstack(phi_hst)
+    #
+    cos_phi = np.zeros_like(t_use)
+    sin_phi = np.zeros_like(t_use)
+    use_phi = np.zeros_like(t_use)
+    for tW, tphi in zip(W_avg, phi_hst):
+        ttidx = np.logical_and(tW >= w_Range[0], tW <= w_Range[1])
+        use_phi = use_phi + ttidx
+        cos_phi = cos_phi + np.cos(tphi) * ttidx
+        sin_phi = sin_phi + np.sin(tphi) * ttidx
+    cplx_R = (cos_phi + 1j * sin_phi) / use_phi
+    return t_hist, cplx_R
+
+
+def core_polar_order(problem: 'problemClass._base2DProblem',
+                     figsize=np.array((50, 50)) * 5, dpi=100,
+                     plt_tmin=-np.inf, plt_tmax=np.inf,
+                     markevery=0.3, linestyle='-C1',
+                     xscale='linear', yscale='linear',
+                     show_idx=None):
+    t_hist, cplx_R = cal_polar_order(problem, t_tmin=plt_tmin, t_tmax=plt_tmax, show_idx=show_idx)
+    odp_R = np.linalg.norm(cplx_R, axis=-1)
+    xlim, ylim = (t_hist.min(), t_hist.max()), (0, 1.03)
+
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    axi.plot(t_hist, odp_R, linestyle, markevery=markevery, )
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('$R$')
+    axi.set_xscale(xscale)
+    axi.set_yscale(yscale)
+    axi.set_xlim(*xlim)
+    axi.set_ylim(*ylim)
+    axi.spines['top'].set_visible(False)
+    axi.spines['right'].set_visible(False)
+    axi.spines['left'].set_position(('data', xlim[0]))
+    axi.spines['bottom'].set_position(('data', ylim[0]))
+    axi.tick_params(direction='in')
+    axi.plot(1, ylim[0], ">k", transform=axi.get_yaxis_transform(), clip_on=False)
+    axi.plot(xlim[0], 1, "^k", transform=axi.get_xaxis_transform(), clip_on=False)
+    return fig, axi

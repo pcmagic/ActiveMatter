@@ -8,9 +8,11 @@ global perspective, handle the positional (and other external) relationships.
 from petsc4py import PETSc
 import abc
 import numpy as np
-import scipy as scp
+# import scipy as scp
 from scipy.spatial import Voronoi
 # from petsc4py import PETSc
+import warnings
+
 from act_src import baseClass
 from act_src import particleClass
 from act_src import problemClass
@@ -82,10 +84,12 @@ class _baseRelation2D(_baseRelation):
         self._overlap_epsilon = e
 
     def _check_overlap(self):
-        err_msg = 'some particles overlap'
         t1 = self.rho_ij > self.overlap_epsilon
         np.fill_diagonal(t1, True)
-        assert t1.all(), err_msg
+        # assert t1.all(), err_msg
+        if not t1.all():
+            err_msg = '%d particle pairs overlap' % (np.sum(np.logical_not(t1)) / 2)
+            warnings.warn(err_msg)
         return True
 
     def check_self(self, **kwargs):
@@ -182,6 +186,22 @@ class _baseRelation2D(_baseRelation):
         self._theta_ij = theta_ij
         return True
 
+    # def cal_theta_rho_phi(self):
+    #     prb = self.father  # type: problemClass._baseProblem
+    #     theta_ij = np.zeros((prb.n_obj, prb.n_obj))
+    #     rho_ij = np.zeros((prb.n_obj, prb.n_obj))
+    #     phi_rho_ij = np.zeros((prb.n_obj, prb.n_obj))
+    #     obji: particleClass.particle2D
+    #     for i0, obji in enumerate(prb.obj_list):
+    #         tPij = prb.Xall - obji.X
+    #         tphi_rhoij = np.arctan2(tPij[:, 1], tPij[:, 0])
+    #         rho_ij[i0, :] = np.linalg.norm(tPij, axis=-1)
+    #         theta_ij[i0, :] = spf.warpToPi(tphi_rhoij - obji.phi)
+    #         phi_rho_ij[i0, :] = tphi_rhoij
+    #     self._rho_ij = rho_ij
+    #     self._theta_ij = theta_ij
+    #     return True
+
     def update_relation(self, **kwargs):
         pass
 
@@ -216,7 +236,8 @@ class AllBaseRelation2D(_baseRelation2D):
         for obji in prb.obj_list:
             obji.neighbor_list.clear()
             for objj in prb.obj_list:
-                obji.neighbor_list.append_noCheck(objj)
+                if objj is not obji:
+                    obji.neighbor_list.append_noCheck(objj)
         return True
 
 
@@ -312,7 +333,8 @@ class localBaseRelation2D(_baseRelation2D):
         self._localRange = localRange
 
     def update_relation(self, **kwargs):
-        self.cal_rho()
+        # self.cal_rho()
+        self.cal_theta_rho()
         return True
 
     def update_neighbor(self, **kwargs):
@@ -320,7 +342,8 @@ class localBaseRelation2D(_baseRelation2D):
         for obji, trhoij in zip(prb.obj_list, self.rho_ij):
             obji.neighbor_list.clear()
             for objj in prb.obj_list[trhoij < self.localRange]:
-                obji.neighbor_list.append_noCheck(objj)
+                if objj is not obji:
+                    obji.neighbor_list.append_noCheck(objj)
         return True
 
     def print_info(self):
@@ -336,6 +359,11 @@ class periodicLocalRelation2D(localBaseRelation2D):
         assert isinstance(self.father, problemClass.periodic2DProblem), err_msg
         return True
 
+    def update_relation(self, **kwargs):
+        # self.cal_rho()
+        self.cal_theta_rho()
+        return True
+
     def cal_rho(self):
         prb = self.father  # type: problemClass.periodic2DProblem
         Xrange = prb.Xrange
@@ -348,4 +376,24 @@ class periodicLocalRelation2D(localBaseRelation2D):
             trhoij = np.linalg.norm(tPij, axis=-1)
             rho_ij[i0, :] = trhoij
         self._rho_ij = rho_ij
+        # print('cal_rho')
+        return True
+
+    def cal_theta_rho(self):
+        prb = self.father  # type: problemClass.periodic2DProblem
+        Xrange = prb.Xrange
+        halfXrange = prb.halfXrange
+        theta_ij, rho_ij = np.zeros((prb.n_obj, prb.n_obj)), np.zeros((prb.n_obj, prb.n_obj)),
+        obji: particleClass.particle2D
+        for i0, obji in enumerate(prb.obj_list):
+            tPij = prb.Xall - obji.X
+            tPij = np.where(tPij > halfXrange, tPij - Xrange, tPij)
+            tPij = np.where(tPij < -halfXrange, tPij + Xrange, tPij)
+            tphi_rhoij = np.arctan2(tPij[:, 1], tPij[:, 0])
+            trhoij = np.linalg.norm(tPij, axis=-1)
+            rho_ij[i0, :] = trhoij
+            theta_ij[i0, :] = spf.warpToPi(tphi_rhoij - obji.phi)
+        self._rho_ij = rho_ij
+        self._theta_ij = theta_ij
+        # print('cal_theta_rho')
         return True

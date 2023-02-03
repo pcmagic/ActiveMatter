@@ -12,6 +12,7 @@ import numpy as np
 from act_codeStore.support_fun import warpToPi
 from act_src import baseClass
 from act_src import problemClass
+from act_src.interactionClass import _baseAction
 from act_codeStore.support_class import *
 
 
@@ -33,6 +34,7 @@ class _baseParticle(baseClass.baseObj):
         self._trs_noise = 0  # translational noise
         self._dipole = 0  # dipole intensity
         self._neighbor_list = uniqueList(acceptType=_baseParticle)
+        self._action_list = uniqueList(acceptType=_baseAction)
         # print(self._name)
         # print(self._type)
         # print(self._kwargs)
@@ -257,6 +259,7 @@ class particle2D(_baseParticle):
         # self._type = 'particle2D'
         self._dimension = 2  # 2 for 2D
         self._viewRange = np.ones(1) * np.pi  # how large the camera can view.
+        self._w = 0  # particle self-spin speed
         self._P1 = np.array((1, 0))  # major norm P1, for 2D version
         self._phi = 0  # angular coordinate of P1
         self._phi_hist = []  # major norm P1, for 2D version
@@ -283,6 +286,14 @@ class particle2D(_baseParticle):
         assert -np.pi <= viewRange <= np.pi
         self._viewRange = viewRange
 
+    @property
+    def w(self):
+        return self._w
+
+    @w.setter
+    def w(self, w):
+        self._w = w
+
     @_baseParticle.P1.setter
     def P1(self, P1):
         # err_msg = 'wrong array size'
@@ -299,7 +310,7 @@ class particle2D(_baseParticle):
         # phi = np.hstack((phi,))
         err_msg = 'phi is a scale. '
         assert phi.size == 1, err_msg
-        assert -np.pi <= phi <= np.pi
+        assert -np.pi <= phi <= np.pi, phi
         self._phi = phi
         self.update_P1()
 

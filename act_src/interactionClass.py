@@ -77,6 +77,10 @@ class _baseAction(baseClass.baseObj):
         return 0, 0
 
     @abc.abstractmethod
+    def Jacobian(self):
+        return None
+
+    @abc.abstractmethod
     def update_action(self, **kwargs):
         return 0, 0
 
@@ -110,14 +114,6 @@ class _baseAction2D(_baseAction):
         self._obj_list = uniqueList(acceptType=particleClass.particle2D)  # contain objects
 
     def update_action(self, F):
-        # Uall, Wall = [], []
-        # for obji in self.obj_list:
-        #     u, w = self.update_each_action(obji)
-        #     Uall.append(u)
-        #     Wall.append(w)
-        # Uall = np.hstack(Uall)
-        # Wall = np.hstack(Wall)
-
         nobj = self.n_obj
         dimension = self.dimension
         dmda = self.dmda
@@ -135,6 +131,8 @@ class _baseAction2D(_baseAction):
             F.setValues((dimension * i1, dimension * i1 + 1), u, addv=True)
             F.setValue(idxW0 + i0, w, addv=True)
             # print('dbg', i0, [obji.X for obji in obj_list])
+        # if self.type == 'phaseLag2D':
+        #     print(F[:])
         return True
 
 
@@ -142,6 +140,12 @@ class selfPropelled2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass._baseParticle", **kwargs):
         U = obji.u * obji.P1
         return U, 0
+
+
+class selfSpeed2D(_baseAction2D):
+    def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
+        U = obji.u * obji.P1
+        return U, obji.w
 
 
 class Dipole2D(_baseAction2D):
@@ -294,8 +298,8 @@ class Align2D(_baseAction2D):
             Wi1 += np.sin(tphi_ij) * t2
             Wi2 += t2
             # print()
-            # print(obji_idx, objj_idx, tphi_ij, obji.align * obji.u * np.sin(tphi_ij) * t2, t2)
-        Wi = obji.align * obji.u * Wi1 / Wi2
+            # print(obji_idx, objj_idx, tphi_ij, obji.align  * np.sin(tphi_ij) * t2, t2)
+        Wi = obji.align * Wi1 / Wi2
         return np.zeros(2), Wi
 
 
@@ -321,8 +325,8 @@ class AlignAttract2D(_baseAction2D):
             Wi1_attract += trho * np.sin(tth) * t2
             Wi2 += t2
             # print()
-            # print(obji_idx, objj_idx, tphi_ij, obji.align * obji.u * np.sin(tphi_ij) * t2, t2)
-        Wi1 = obji.align * obji.u * Wi1_align + obji.attract * Wi1_attract
+            # print(obji_idx, objj_idx, tphi_ij, obji.align  * np.sin(tphi_ij) * t2, t2)
+        Wi1 = obji.align * Wi1_align + obji.attract * Wi1_attract
         Wi = Wi1 / Wi2
         return np.zeros(2), Wi
 
@@ -372,11 +376,210 @@ class phaseLag2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
         phaseLag = self.phaseLag
         Ui = np.zeros(2)
-        Wi = obji.align * obji.u * np.mean([np.sin(objj.phi - obji.phi - phaseLag)
-                                            for objj in obji.neighbor_list])
+        Wi = obji.align * np.mean([np.sin(objj.phi - obji.phi - phaseLag)
+                                   for objj in obji.neighbor_list]) \
+            if obji.neighbor_list else 0
         return Ui, Wi
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
         spf.petscInfo(self.father.logger, '  phaseLag=%f' % self.phaseLag)
+        return True
+
+
+class phaseLag2D_Wiener(phaseLag2D):
+    def __init__(self, phaseLag_rdm_fct=0, **kwargs):
+        super().__init__(**kwargs)
+        self._phaseLag_rdm_fct = phaseLag_rdm_fct
+
+    @property
+    def phaseLag_rdm_fct(self):
+        return self._phaseLag_rdm_fct
+
+    @phaseLag_rdm_fct.setter
+    def phaseLag_rdm_fct(self, phaseLag_rdm_fct):
+        self._phaseLag_rdm_fct = phaseLag_rdm_fct
+
+    def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
+        prb = self.father  # type: problemClass.behavior2DProblem
+        obji_idx = obji.index
+        relationHandle = prb.relationHandle  # type: relationClass._baseRelation2D
+        # theta_ij = relationHandle.theta_ij
+        rho_ij = relationHandle.rho_ij
+        phaseLag = self.phaseLag
+        phaseLag_rdm_fct = self.phaseLag_rdm_fct
+
+        Ui = np.zeros(2)
+        # --------------------- trivial case
+        # Wi = obji.align * np.mean(
+        #     [np.sin(objj.phi - obji.phi - phaseLag)
+        #      for objj in obji.neighbor_list]) \
+        #     if obji.neighbor_list else 0
+        #
+        phaseLag_random = phaseLag_rdm_fct * np.random.normal()
+        Wi = obji.align * np.mean(
+            [np.sin(objj.phi - obji.phi - phaseLag - phaseLag_random)
+             for objj in obji.neighbor_list]) \
+            if obji.neighbor_list else 0
+        #
+        # phaseLag_random = phaseLag_rdm_fct * np.random.normal()
+        # Wi = obji.align  * np.mean(
+        #     [np.random.normal() * np.sin(objj.phi - obji.phi - phaseLag - phaseLag_random)
+        #      for objj in obji.neighbor_list]) \
+        #     if obji.neighbor_list else 0
+        #
+        # phaseLag_random = phaseLag_rdm_fct
+        # Wi = obji.align * np.mean(
+        #     [np.sin(objj.phi - obji.phi - phaseLag - phaseLag_random / rho_ij[obji_idx, objj.index])
+        #      for objj in obji.neighbor_list]) \
+        #     if obji.neighbor_list else 0
+
+        # print(111)
+        return Ui, Wi
+
+    def print_info(self):
+        baseClass.baseObj.print_info(self)
+        spf.petscInfo(self.father.logger, '  phaseLag=%f, phaseLag_random=%f' %
+                      (self.phaseLag, self.phaseLag_rdm_fct))
+        return True
+
+
+class LennardJonePotential2D_point(_baseAction2D):
+    def __init__(self, A=0, B=0, a=12, b=6, **kwargs):
+        super().__init__(**kwargs)
+        self._A = A
+        self._B = B
+        self._a = a
+        self._b = b
+
+    @property
+    def A(self):
+        return self._A
+
+    @A.setter
+    def A(self, A):
+        self._A = A
+
+    @property
+    def B(self):
+        return self._B
+
+    @B.setter
+    def B(self, B):
+        self._B = B
+
+    @property
+    def a(self):
+        return self._a
+
+    @a.setter
+    def a(self, a):
+        self._a = a
+
+    @property
+    def b(self):
+        return self._b
+
+    @b.setter
+    def b(self, b):
+        self._b = b
+
+    #
+    # def fun_fLJ(self, r):
+    #     rnm = np.linalg.norm()
+    #     t1 = self.a * self.A * r ** (-1 - self.a) - self.b * self.B * r ** (-1 - self.b)
+
+    def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
+        prb = self.father  # type: problemClass.behavior2DProblem
+        obji_idx = obji.index
+        relationHandle = prb.relationHandle  # type: relationClass._baseRelation2D
+        theta_ij = relationHandle.theta_ij
+        rho_ij = relationHandle.rho_ij
+
+        trho = rho_ij[obji_idx, :]
+        trho[obji_idx] = np.inf
+        tphi = theta_ij[obji_idx, :] + obji.phi
+
+        t1 = self.a * self.A * trho ** (-1 - self.a) - self.b * self.B * trho ** (-1 - self.b)
+        # t1[obji_idx] = 0
+        Ui = -np.array((np.mean(t1 * np.cos(tphi)), np.mean(t1 * np.sin(tphi))))
+        Wi = np.zeros(1)
+        return Ui, Wi
+
+    def print_info(self):
+        baseClass.baseObj.print_info(self)
+        spf.petscInfo(self.father.logger, '  A=%e, B=%e, a=%e, b=%e' % (self.A, self.B, self.a, self.b))
+        return True
+
+
+class AttractRepulsion2D_point(_baseAction2D):
+    def __init__(self, k1=-1, k2=-1, k3=1, k4=2, **kwargs):
+        super().__init__(**kwargs)
+        self._k1 = k1
+        self._k2 = k2
+        self._k3 = k3
+        self._k4 = k4
+
+    @property
+    def k1(self):
+        return self._k1
+
+    @k1.setter
+    def k1(self, k1):
+        self._k1 = k1
+
+    @property
+    def k2(self):
+        return self._k2
+
+    @k2.setter
+    def k2(self, k2):
+        self._k2 = k2
+
+    @property
+    def k3(self):
+        return self._k3
+
+    @k3.setter
+    def k3(self, k3):
+        self._k3 = k3
+
+    @property
+    def k4(self):
+        return self._k4
+
+    @k4.setter
+    def k4(self, k4):
+        self._k4 = k4
+
+    def fun_fAR(self, r, obji_idx):
+        # k1 * r ** k2 + k3 * r ** k4
+        r[obji_idx] = np.nan
+        v = self.k1 * r ** self.k2 + self.k3 * r ** self.k4
+        v[obji_idx] = 0
+        return v
+
+    def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
+        prb = self.father  # type: problemClass.behavior2DProblem
+        obji_idx = obji.index
+        relationHandle = prb.relationHandle  # type: relationClass._baseRelation2D
+        rho_ij = relationHandle.rho_ij
+        theta_ij = relationHandle.theta_ij
+        neighbor_idx_list = [objj.index for objj in obji.neighbor_list]
+
+        if len(obji.neighbor_list) > 0:
+            tphi = np.array([theta_ij[obji_idx, index] for index in neighbor_idx_list]) + obji.phi
+            Vi = np.array([self.k1 * rho_ij[obji_idx, index] ** self.k2 + \
+                           self.k3 * rho_ij[obji_idx, index] ** self.k4
+                           for index in neighbor_idx_list])
+            Ui = np.array((np.mean(Vi * np.cos(tphi)), np.mean(Vi * np.sin(tphi)))) + np.zeros(2)
+        else:
+            Ui = np.zeros(2)
+        Wi = np.zeros(1)
+        return Ui, Wi
+
+    def print_info(self):
+        baseClass.baseObj.print_info(self)
+        spf.petscInfo(self.father.logger, '  v = k1 * r ** k2 + k3 * r ** k4')
+        spf.petscInfo(self.father.logger, '  k1=%e, k2=%e, k3=%e, k4=%e' % (self.k1, self.k2, self.k3, self.k4))
         return True
