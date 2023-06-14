@@ -212,7 +212,6 @@ def do_pickle(prb1: problemClass._baseProblem, **kwargs):
 
 
 def do_hdf5(prb1: problemClass._baseProblem, **kwargs):
-    prb1.pick_prepare()
     prb1.hdf5_pick(**kwargs)
     prb1.empty_hist()
     prb1.pick_myself(**kwargs)
@@ -347,7 +346,7 @@ def main_ignFirst(**main_kwargs):
     prb1 = doPrb1.ini_calculate()
     if ign_t > ini_t:
         prb1.do_save = False
-        prb1.update_self(t0=ini_t, t1=ign_t, eval_dt=eval_dt)
+        prb1.update_self(t0=ini_t, t1=ign_t, eval_dt=eval_dt, pick_prepare=False)
         prb1.do_save = True
     prb1.update_self(t0=ign_t, t1=max_t, eval_dt=eval_dt)
     do_hdf5(prb1, **problem_kwargs)

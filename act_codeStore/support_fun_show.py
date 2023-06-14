@@ -20,6 +20,7 @@ from tqdm.notebook import tqdm as tqdm_notebook
 import warnings
 from petsc4py import PETSc
 # from scipy import sparse
+from colorspacious import cspace_converter
 
 import matplotlib
 from matplotlib import animation
@@ -28,7 +29,7 @@ from matplotlib.ticker import Locator
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.proj3d import proj_transform
 from mpl_toolkits.mplot3d.axes3d import Axes3D
-from matplotlib.colors import Normalize, ListedColormap, LogNorm, LinearSegmentedColormap
+from matplotlib.colors import Normalize, ListedColormap, LinearSegmentedColormap  # , LogNorm
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, HPacker, VPacker
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
@@ -61,10 +62,76 @@ preamble = preamble + '\\usepackage{bm} '
 preamble = preamble + '\\usepackage{amsmath} '
 preamble = preamble + '\\usepackage{amssymb} '
 preamble = preamble + '\\usepackage{mathrsfs} '
+preamble = preamble + '\\usepackage{nicefrac, xfrac} '
 preamble = preamble + '\\DeclareMathOperator{\\Tr}{Tr} '
 params['text.latex.preamble'] = preamble
 params['text.usetex'] = True
 plt.rcParams.update(params)
+
+
+def plt_all_colormap(figsize=None, dpi=100):
+    # Indices to step through colormap.
+    x = np.linspace(0.0, 1.0, 100)
+
+    gradient = np.linspace(0, 1, 256)
+    gradient = np.vstack((gradient, gradient))
+
+    def plot_color_gradients(cmap_category, cmap_list):
+        fig, axs = plt.subplots(figsize=figsize, dpi=dpi, nrows=len(cmap_list), ncols=2)
+        fig.subplots_adjust(top=0.95, bottom=0.01, left=0.2, right=0.99,
+                            wspace=0.05)
+        fig.suptitle(cmap_category + ' colormaps', fontsize=14, y=1.0, x=0.6)
+
+        for ax, name in zip(axs, cmap_list):
+            # Get RGB values for colormap.
+            rgb = plt.get_cmap(name)(x)[np.newaxis, :, :3]
+
+            # Get colormap in CAM02-UCS colorspace. We want the lightness.
+            lab = cspace_converter("sRGB1", "CAM02-UCS")(rgb)
+            L = lab[0, :, 0]
+            L = np.float64(np.vstack((L, L, L)))
+
+            ax[0].imshow(gradient, aspect='auto', cmap=plt.get_cmap(name))
+            ax[1].imshow(L, aspect='auto', cmap='binary_r', vmin=0., vmax=100.)
+            pos = list(ax[0].get_position().bounds)
+            x_text = pos[0] - 0.01
+            y_text = pos[1] + pos[3] / 2.
+            fig.text(x_text, y_text, name, va='center', ha='right', fontsize=10)
+
+        # Turn off *all* ticks & spines, not just the ones with colormaps.
+        for ax in axs.flat:
+            ax.set_axis_off()
+
+    plot_color_gradients('Perceptually Uniform Sequential',
+                         ['viridis', 'plasma', 'inferno', 'magma', 'cividis'])
+
+    plot_color_gradients('Sequential',
+                         ['Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
+                          'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
+                          'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn'])
+
+    plot_color_gradients('Sequential (2)',
+                         ['binary', 'gist_yarg', 'gist_gray', 'gray', 'bone',
+                          'pink', 'spring', 'summer', 'autumn', 'winter', 'cool',
+                          'Wistia', 'hot', 'afmhot', 'gist_heat', 'copper'])
+
+    plot_color_gradients('Diverging',
+                         ['PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu',
+                          'RdYlGn', 'Spectral', 'coolwarm', 'bwr', 'seismic'])
+
+    plot_color_gradients('Cyclic', ['twilight', 'twilight_shifted', 'hsv'])
+
+    plot_color_gradients('Qualitative',
+                         ['Pastel1', 'Pastel2', 'Paired', 'Accent', 'Dark2',
+                          'Set1', 'Set2', 'Set3', 'tab10', 'tab20', 'tab20b',
+                          'tab20c'])
+
+    plot_color_gradients('Miscellaneous',
+                         ['flag', 'prism', 'ocean', 'gist_earth', 'terrain',
+                          'gist_stern', 'gnuplot', 'gnuplot2', 'CMRmap',
+                          'cubehelix', 'brg', 'gist_rainbow', 'rainbow', 'jet',
+                          'turbo', 'nipy_spectral', 'gist_ncar'])
+    return True
 
 
 def set_axes_equal(ax, rad_fct=0.5):
@@ -578,6 +645,19 @@ def binary_diverging():
     colors = plt.get_cmap('binary')(np.linspace(0.2, 1, 256))
     cmap = LinearSegmentedColormap.from_list('my_colormap', colors)
     return cmap
+
+
+def mid_cmap():
+    colors11 = plt.get_cmap('Blues')
+    colors12 = plt.get_cmap('Reds')
+    colors1 = np.vstack((colors11(np.linspace(1, 0.2, 256)), colors12(np.linspace(0.2, 1, 256))))
+    cmap1 = LinearSegmentedColormap.from_list('my_colormap', colors1)
+    # colors21 = plt.get_cmap('bone')
+    # colors22 = plt.get_cmap('spring')
+    # # colors2 = np.vstack((colors21(np.linspace(0, 0.5, 256)), colors22(np.linspace(0, 1, 256))))
+    # colors2 = colors22(np.linspace(0, 1, 256))
+    # cmap2 = mcolors.LinearSegmentedColormap.from_list('my_colormap', colors2)
+    return cmap1
 
 
 class Arrow3D(FancyArrowPatch):
@@ -1135,10 +1215,12 @@ def _segments_fun(obji: 'particleClass.particle2D', tidx, axi, cmap, t0_marker,
 
 
 def _core_X2D_fun(problem: 'problemClass._base2DProblem', line_fun, show_idx=None,
-                  figsize=np.array((50, 50)) * 5, dpi=100, plt_tmin=-np.inf, plt_tmax=np.inf,
+                  figsize=None, dpi=None, plt_tmin=-np.inf, plt_tmax=np.inf,
                   resampling_fct=None, interp1d_kind='quadratic',
                   t0_marker='s', cmap=plt.get_cmap('brg'),
                   range_full_obj=True, plt_full_time=True, **line_fun_kwargs):
+    figsize = np.ones(2) * 5 if figsize is None else figsize
+    dpi = 100 if dpi is None else dpi
     _ = _show_prepare(figsize, dpi, problem, plt_tmin, plt_tmax, show_idx, range_full_obj)
     tidx, show_list, range_list, fig, axi = _
     if np.any(tidx):
@@ -1276,8 +1358,10 @@ def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
                           figsize=np.array((50, 50)) * 5, dpi=100,
                           plt_tmin=-np.inf, plt_tmax=np.inf,
                           resampling_fct=1, interp1d_kind='quadratic',
-                          vmin=0, vmax=1, cmap=plt.get_cmap('bwr'), tavr=1, npabs=True,
+                          vmin=None, vmax=1, cmap=plt.get_cmap('bwr'), tavr=1, npabs=True,
                           sort_idx=None):
+    if vmin is None:
+        vmin = 0 if npabs else -1
     align = problem.align
     t_plot, W_avg, _ = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
                                    resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
@@ -1449,3 +1533,148 @@ def core_polar_order(problem: 'problemClass._base2DProblem',
     axi.plot(1, ylim[0], ">k", transform=axi.get_yaxis_transform(), clip_on=False)
     axi.plot(xlim[0], 1, "^k", transform=axi.get_xaxis_transform(), clip_on=False)
     return fig, axi
+
+
+deta1_fun = lambda meat1, meta2, alpha, align: spf.warpToPi(
+    -align / 2 * (2 * np.sin(meat1) * np.cos(alpha) + np.sin(meta2 + alpha) + np.sin(meat1 - meta2 - alpha)))
+deta2_fun = lambda meat1, meta2, alpha, align: spf.warpToPi(
+    -align / 2 * (2 * np.sin(meta2) * np.cos(alpha) + np.sin(meat1 + alpha) + np.sin(meta2 - meat1 - alpha)))
+
+
+def fun_grdmp_bck(fig, axi, alpha, align, order=1, cmap=plt.get_cmap('gray_r'),
+                  plt_colorbar=True):
+    def _fun_grdmp_nth(etati, alpha, align, order):
+        for _ in np.arange(order):
+            etati = [spf.warpToPi(deta1_fun(etati[0], etati[1], alpha, align) + etati[0]),
+                     spf.warpToPi(deta2_fun(etati[0], etati[1], alpha, align) + etati[1])]
+        return etati
+
+    # plot background gradient map
+    etat0 = np.meshgrid(np.linspace(-1, 1, 21) * np.pi, np.linspace(-1, 1, 21) * np.pi)
+    eta_use = _fun_grdmp_nth(etat0, alpha, align, order)
+    deta_use = [spf.warpToPi(eta_use[0] - etat0[0]),
+                spf.warpToPi(eta_use[1] - etat0[1])]
+    axi.set_xlabel('$\\eta_1 / \\pi$')
+    axi.set_ylabel('$\\eta_2 / \\pi$')
+    axi.set_title('$\\sigma = %f$' % align)
+
+    # # gradient field, normalized by sigma
+    # norm = LogNorm(vmin=1e-2, vmax=1e0)
+    # tnorm = np.sqrt(deta_use[0] ** 2 + deta_use[1] ** 2)
+    # cqu = axi.quiver(etat0[0] / np.pi, etat0[1] / np.pi, deta_use[0] / tnorm, deta_use[1] / tnorm, tnorm / align,
+    #                  norm=norm, cmap=cmap, angles='xy', pivot='mid', scale=40)
+    # fig.colorbar(cqu).ax.set_title('$|\\delta\\eta^{t+%d}| / \\sigma$ \n' % order)
+
+    # gradient field, MOD pi
+    norm = Normalize(vmin=0, vmax=1)
+    tnorm = np.sqrt(deta_use[0] ** 2 + deta_use[1] ** 2)
+    cqu = axi.quiver(etat0[0] / np.pi, etat0[1] / np.pi, deta_use[0] / tnorm, deta_use[1] / tnorm, tnorm / np.pi,
+                     norm=norm, cmap=cmap, angles='xy', pivot='mid', scale=40)
+    if plt_colorbar:
+        cbar = fig.colorbar(cqu, shrink=.99)
+        cbar.ax.set_title('$\\sfrac{|\\delta\\eta^{t+%d}|}{\\pi} $' % order, fontsize='small')
+        cbar.ax.tick_params(labelsize='small')
+    return True
+
+
+def axi_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem', axi,
+                         plt_tmin_fct=0, plt_tmax_fct=1, tavr_fct=0.1,
+                         resampling_fct=1, interp1d_kind='quadratic',
+                         vmin=0, vmax=1, cmap=plt.get_cmap('bwr'), npabs=True,
+                         sort_idx=None, substract_mean0=False):
+    ini_t, max_t, eval_dt = problem.t0, problem.t1, problem.eval_dt
+    plt_tmin, plt_tmax, tavr = ini_t + (max_t - ini_t) * plt_tmin_fct, ini_t + (
+            max_t - ini_t) * plt_tmax_fct, tavr_fct * eval_dt
+    align = problem.align
+    t_plot, avg_all, _ = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                     resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                     tavr=tavr, npabs=npabs)
+    sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
+    if substract_mean0:
+        avg_all = avg_all - np.mean(avg_all[sort_idx[0]])
+
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    c = axi.pcolorfast(t_plot, obj_idx, avg_all[sort_idx, :] / align, cmap=cmap, norm=norm)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    axi.set_yticks(obj_idx[1:] - 0.5)
+    axi.set_yticklabels(obj_idx[1:])
+    return c
+
+
+def axi_rltPhaseVelocity(problem: 'problemClass.behavior2DProblem', axi,
+                         plt_tmin_fct=0, plt_tmax_fct=1, tavr_fct=0.1,
+                         resampling_fct=1, interp1d_kind='quadratic',
+                         vmin=0, vmax=1, cmap=plt.get_cmap('bwr'), npabs=True,
+                         sort_idx=None, ):
+    ini_t, max_t, eval_dt = problem.t0, problem.t1, problem.eval_dt
+    plt_tmin, plt_tmax, tavr = ini_t + (max_t - ini_t) * plt_tmin_fct, ini_t + (
+            max_t - ini_t) * plt_tmax_fct, tavr_fct * eval_dt
+    align = problem.align
+    t_plot, avg_all, _ = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                     resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                     tavr=tavr, npabs=npabs)
+    sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
+    avg_all = avg_all - avg_all[sort_idx[0]]
+
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    obj_idx = np.arange(0, problem.n_obj)
+    c = axi.pcolorfast(t_plot, obj_idx, avg_all[sort_idx[1:], :] / align, cmap=cmap, norm=norm)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj - 1)
+    axi.set_yticks(obj_idx[1:] - 0.5)
+    axi.set_yticklabels(obj_idx[1:])
+    return c
+
+
+def axi_avrPhase(problem: 'problemClass.behavior2DProblem', axi,
+                 plt_tmin_fct=0, plt_tmax_fct=1, tavr_fct=0.1,
+                 resampling_fct=1, interp1d_kind='quadratic',
+                 cmap=plt.get_cmap('bwr'), npabs=True,
+                 sort_idx=None):
+    ini_t, max_t, eval_dt = problem.t0, problem.t1, problem.eval_dt
+    plt_tmin, plt_tmax, tavr = ini_t + (max_t - ini_t) * plt_tmin_fct, ini_t + (
+            max_t - ini_t) * plt_tmax_fct, tavr_fct * eval_dt
+    align = problem.align
+    t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                         resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                         tavr=tavr, npabs=npabs)
+    sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
+    phi_avg = phi_avg - np.mean(phi_avg[sort_idx[0]])
+
+    vmin, vmax = -1, 1
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx, :] / align, cmap=cmap, norm=norm)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    axi.set_yticks(obj_idx[1:] - 0.5)
+    axi.set_yticklabels(obj_idx[1:])
+    return c
+
+
+def axi_rltPhase(problem: 'problemClass.behavior2DProblem', axi,
+                 plt_tmin_fct=0, plt_tmax_fct=1, tavr_fct=0.1,
+                 resampling_fct=1, interp1d_kind='quadratic',
+                 cmap=plt.get_cmap('bwr'), npabs=True,
+                 sort_idx=None, ):
+    ini_t, max_t, eval_dt = problem.t0, problem.t1, problem.eval_dt
+    plt_tmin, plt_tmax, tavr = ini_t + (max_t - ini_t) * plt_tmin_fct, ini_t + (
+            max_t - ini_t) * plt_tmax_fct, tavr_fct * eval_dt
+    align = problem.align
+    t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                         resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                         tavr=tavr, npabs=npabs)
+    sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
+    phi_avg = phi_avg - phi_avg[sort_idx[0]]
+
+    vmin, vmax = -1, 1
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    obj_idx = np.arange(0, problem.n_obj)
+    c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx[1:], :] / align, cmap=cmap, norm=norm)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj - 1)
+    axi.set_yticks(obj_idx[1:] - 0.5)
+    axi.set_yticklabels(obj_idx[1:])
+    return c

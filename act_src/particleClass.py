@@ -372,7 +372,7 @@ class particle2D(_baseParticle):
             assert isinstance(obji, particle2D), err_msg % 'neighbor_list'
         assert np.isfinite(self.P1).all(), err_msg % 'P1'
         assert self.P1.shape == (2,), err_msg % 'P1'
-        assert isinstance(self.phi, np.float), err_msg % 'phi'
+        assert isinstance(self.phi, np.float64), err_msg % 'phi'
         assert np.isfinite(self.phi), err_msg % 'phi'
         return True
 

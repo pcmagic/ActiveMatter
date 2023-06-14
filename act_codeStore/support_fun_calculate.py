@@ -190,7 +190,6 @@ class _base_do2D(_base_doCalculate):
 
         problem = self.ini_calculate()
         problem.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
-        problem.pick_prepare()
         return problem
 
 

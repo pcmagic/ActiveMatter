@@ -399,7 +399,7 @@ class _baseProblem(baseClass.baseObj):
         self.relationHandle.check_self()
         return True
 
-    def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
+    def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001, pick_prepare=True):
         spf.petscInfo(self.logger, ' ')
         spf.petscInfo(self.logger, 'Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -444,6 +444,8 @@ class _baseProblem(baseClass.baseObj):
 
         # finish simulation
         self.update_finish(ts)
+        if pick_prepare:
+            self.pick_prepare()
         return True
 
     @abc.abstractmethod
@@ -485,7 +487,7 @@ class _baseProblem(baseClass.baseObj):
         save_every = self._save_every
         # print(ts.getTimeStep())
         if not i % save_every:
-            percentage = np.clip(t / self._t1 * 100, 0, 100)
+            percentage = np.clip((t - self._t0) / (self._t1 - self._t0) * 100, 0, 100)
             dp = int(percentage - self.percentage)
             if (dp >= 1) and self.rank0:
                 self.tqdm.update(dp)
