@@ -414,7 +414,7 @@ def lyp_all_list_fun(xt, align, phaseLag2D, t_itera, nptc):
         xt = G_fun(xt, align, phaseLag2D)
         q, r = np.linalg.qr(J_fun(xt, align, phaseLag2D) @ q)
         sum_lnR = sum_lnR + np.real(np.log(np.diag(r)))
-        lyp_list.append(sum_lnR / (i0 + 1))
+        lyp_list.append(sum_lnR[np.argsort(np.abs(sum_lnR))[1:]] / (i0 + 1))
     lyp_list = np.vstack(lyp_list)
     return lyp_list
 

@@ -709,7 +709,7 @@ def write_myscript(job_name_list, job_dir):
 
 
 def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
-                         txt_list=None, local_hostname='JiUbuntu',
+                         txt_list=None, local_hostname='JiUbuntu', use_std_output=True,
                          remote_hostname=None, remote_path=None):
     PWD = os.getcwd()
     comm_list = np.array(comm_list)
@@ -767,8 +767,12 @@ def write_main_run_local(comm_list, njob_node, job_dir, random_order=False,
     with open(t_name, 'w') as fcsh:
         fcsh.write('#!/bin/csh -fe \n\n')
         t2 = 'comm_list=('
-        for ttxt, tcomm in zip(txt_list, comm_list):
-            t2 = t2 + '"%s 2>std_output/%s.stderr 1>std_output/%s.stdout" ' % (tcomm, ttxt, ttxt)
+        if use_std_output:
+            for ttxt, tcomm in zip(txt_list, comm_list):
+                t2 = t2 + '"%s 2>std_output/%s.stderr 1>std_output/%s.stdout" ' % (tcomm, ttxt, ttxt)
+        else:
+            for tcomm in comm_list:
+                t2 = t2 + '"%s" ' % tcomm
         t2 = t2 + ') \n\n'
         fcsh.write(t2)
         fcsh.write('echo ${comm_list[$1]} \n')

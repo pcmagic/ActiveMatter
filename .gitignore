@@ -42,6 +42,7 @@ bck/*
 *dbg/
 *dbg/*
 */try_*/
+*_bck*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
