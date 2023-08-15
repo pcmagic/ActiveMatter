@@ -45,6 +45,7 @@ bck/*
 *_bck*
 MR_ch13_wheeled_mobile_robots.pdf
 MR.pdf
+collectiveFish/*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
