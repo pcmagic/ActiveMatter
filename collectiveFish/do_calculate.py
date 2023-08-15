@@ -45,7 +45,8 @@ calculate_fun_dict = {
     'do_phaseLagWiener2D_AR_Voronoi': spc.do_phaseLagWiener2D_AR,
     'do_phaseLag2D_Wiener':           spc.do_phaseLag2D_Wiener,
     'do_dbg_action':                  spc.do_dbg_action,
-}
+    'do_ackermann':                   spc.do_ackermann,
+    }
 
 prbHandle_dict = {
     'do_FiniteDipole2D':              problemClass.finiteDipole2DProblem,
@@ -67,7 +68,8 @@ prbHandle_dict = {
     'do_phaseLagWiener2D_AR_Voronoi': problemClass.behavior2DProblem,
     'do_phaseLag2D_Wiener':           problemClass.behavior2DProblem,
     'do_dbg_action':                  problemClass.finiteDipole2DProblem,
-}
+    'do_ackermann':                   problemClass.Ackermann2DProblem,
+    }
 
 rltHandle_dict = {
     'do_FiniteDipole2D':              relationClass.finiteRelation2D,
@@ -90,7 +92,8 @@ rltHandle_dict = {
     'do_phaseLagWiener2D_AR_Voronoi': relationClass.VoronoiBaseRelation2D,
     'do_phaseLag2D_Wiener':           relationClass.localBaseRelation2D,
     'do_dbg_action':                  relationClass.finiteRelation2D,
-}
+    'do_ackermann':                   relationClass.AllBaseRelation2D,
+    }
 
 ptcHandle_dict = {
     'do_FiniteDipole2D':              particleClass.finiteDipole2D,
@@ -112,7 +115,8 @@ ptcHandle_dict = {
     'do_phaseLagWiener2D_AR_Voronoi': particleClass.particle2D,
     'do_phaseLag2D_Wiener':           particleClass.particle2D,
     'do_dbg_action':                  particleClass.finiteDipole2D,
-}
+    'do_ackermann':                   particleClass.ackermann2D,
+    }
 
 
 # get kwargs
@@ -156,6 +160,9 @@ def get_problem_kwargs(**main_kwargs):
     # periodic boundary condition
     Xrange = np.float64(OptDB.getReal('Xrange', Xlim))
 
+    # ackermann parameters
+    l_steer = np.float64(OptDB.getReal('l_steer', 1))
+
     err_msg = 'wrong parameter eval_dt, eval_dt>0. '
     assert eval_dt > 0, err_msg
     # err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
@@ -193,10 +200,11 @@ def get_problem_kwargs(**main_kwargs):
         'LJ_b':             LJ_b,
         'rot_noise':        rot_noise,
         'trs_noise':        trs_noise,
+        'l_steer':          l_steer,
         'phaseLag_rdm_fct': phaseLag_rdm_fct,
         'seed':             seed,
         'tqdm_fun':         tqdm,
-    }
+        }
 
     kwargs_list = (main_kwargs,)
     for t_kwargs in kwargs_list:
@@ -233,21 +241,21 @@ def export_trajectory2D(prb1: problemClass._baseProblem, **kwargs):
     if rank == 0:
         if save_fig:
             filename = '%s/fig_%s.png' % (prb1.name, prb1.name)
-            sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-                             plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=resampling_fct,
-                             plt_full_obj=True, plt_full_time=False, )
+            sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize = figsize, dpi = dpi,
+                             plt_tmin = -np.inf, plt_tmax = np.inf, resampling_fct = resampling_fct,
+                             plt_full_obj = True, plt_full_time = False, )
         #
         if save_sub_fig:
             t1 = np.linspace(prb1.t0, prb1.t1, 11)
             for i0, (plt_tmin, plt_tmax) in enumerate(zip(t1[:-1], t1[1:])):
                 filename = '%s/fig_%s_%d.png' % (prb1.name, prb1.name, i0)
-                sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize=figsize, dpi=dpi,
-                                 plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct,
-                                 plt_full_obj=True, plt_full_time=False, )
+                sps.save_fig_fun(filename, prb1, sps.core_trajectory2D, figsize = figsize, dpi = dpi,
+                                 plt_tmin = plt_tmin, plt_tmax = plt_tmax, resampling_fct = resampling_fct,
+                                 plt_full_obj = True, plt_full_time = False, )
     return True
 
 
-def export_avrPhaseVelocity(prb1: problemClass._baseProblem, tavr=10, **kwargs):
+def export_avrPhaseVelocity(prb1: problemClass._baseProblem, tavr = 10, **kwargs):
     OptDB = PETSc.Options()
     comm = PETSc.COMM_WORLD.tompi4py()
     rank = comm.Get_rank()
@@ -261,13 +269,13 @@ def export_avrPhaseVelocity(prb1: problemClass._baseProblem, tavr=10, **kwargs):
         resampling_fct, interp1d_kind = 1, 'linear'
         cmap = plt.get_cmap('viridis')
         avrW_name = '%s/avrW_%s.png' % (prb1.name, prb1.name)
-        sps.save_fig_fun(avrW_name, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi,
-                         plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct, cmap=cmap,
-                         tavr=tavr)
+        sps.save_fig_fun(avrW_name, prb1, sps.core_avrPhaseVelocity, figsize = figsize, dpi = dpi,
+                         plt_tmin = plt_tmin, plt_tmax = plt_tmax, resampling_fct = resampling_fct, cmap = cmap,
+                         tavr = tavr)
     return True
 
 
-def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
+def export_20220629(prb1: problemClass._baseProblem, tavr = 10, **kwargs):
     OptDB = PETSc.Options()
     comm = PETSc.COMM_WORLD.tompi4py()
     rank = comm.Get_rank()
@@ -281,21 +289,21 @@ def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
         vmin, vmax = -1, 1
         cmap = sps.twilight_diverging()
         fig_name = '%s/avrW_%s.png' % (prb1.name, prb1.name)
-        sps.save_fig_fun(fig_name, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi,
-                         plt_tmin=plt_tmin, plt_tmax=plt_tmax, resampling_fct=resampling_fct, cmap=cmap,
-                         vmin=vmin, vmax=vmax, npabs=False, tavr=tavr)
+        sps.save_fig_fun(fig_name, prb1, sps.core_avrPhaseVelocity, figsize = figsize, dpi = dpi,
+                         plt_tmin = plt_tmin, plt_tmax = plt_tmax, resampling_fct = resampling_fct, cmap = cmap,
+                         vmin = vmin, vmax = vmax, npabs = False, tavr = tavr)
         # ----------------------------------
         markevery, linestyle = 0.3, 'o-C1',
         fig_name = '%s/orderR_%s.png' % (prb1.name, prb1.name)
-        sps.save_fig_fun(fig_name, prb1, sps.core_polar_order, figsize=figsize, dpi=dpi,
-                         plt_tmin=plt_tmin, plt_tmax=plt_tmax, markevery=markevery, linestyle=linestyle)
+        sps.save_fig_fun(fig_name, prb1, sps.core_polar_order, figsize = figsize, dpi = dpi,
+                         plt_tmin = plt_tmin, plt_tmax = plt_tmax, markevery = markevery, linestyle = linestyle)
         # ----------------------------------
         cmap = plt.get_cmap('twilight_shifted')
         fig_name = '%s/avrPhi1_%s.png' % (prb1.name, prb1.name)
-        sps.save_fig_fun(fig_name, prb1, sps.core_avrPhase, figsize=figsize, dpi=dpi,
-                         plt_tmin=plt_tmin, plt_tmax=plt_tmax,
-                         resampling_fct=resampling_fct, cmap=cmap,
-                         tavr=0.01, sort_type='normal')
+        sps.save_fig_fun(fig_name, prb1, sps.core_avrPhase, figsize = figsize, dpi = dpi,
+                         plt_tmin = plt_tmin, plt_tmax = plt_tmax,
+                         resampling_fct = resampling_fct, cmap = cmap,
+                         tavr = 0.01, sort_type = 'normal')
         # fig_name = '%s/avrPhi2_%s.png' % (prb1.name, prb1.name)
         # sps.save_fig_fun(fig_name, prb1, sps.core_avrPhase, figsize=figsize, dpi=dpi,
         #                  plt_tmin=plt_tmin, plt_tmax=plt_tmax,
@@ -304,7 +312,7 @@ def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
     return True
 
 
-@profile(filename="profile_out")
+@profile(filename = "profile_out")
 def main_profile(**main_kwargs):
     return main_fun(**main_kwargs)
 
@@ -319,7 +327,7 @@ def main_fun(**main_kwargs):
 
     # spf.petscInfo(self.father.logger, problem_kwargs)
     doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
-    prb1 = doPrb1.do_calculate(ini_t=ini_t, max_t=max_t, eval_dt=eval_dt, )  # type: problemClass._baseProblem
+    prb1 = doPrb1.do_calculate(ini_t = ini_t, max_t = max_t, eval_dt = eval_dt, )  # type: problemClass._baseProblem
     # prb1.dbg_t_hist(np.linspace(0, 1, 10 ** 8))
     # do_pickle(prb1, **problem_kwargs)
     do_hdf5(prb1, **problem_kwargs)
@@ -327,9 +335,9 @@ def main_fun(**main_kwargs):
     # import time
     # time.sleep(2)
     export_trajectory2D(prb1)
-    export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
+    export_avrPhaseVelocity(prb1, tavr = np.min((10, max_t / 10)))
     # export_20220629(prb1, tavr=np.min((10, max_t / 10)))
-    export_20220629(prb1, tavr=eval_dt)
+    export_20220629(prb1, tavr = eval_dt)
     # export_avrPhaseVelocity(prb1, tavr=1)
 
     return True
@@ -346,14 +354,14 @@ def main_ignFirst(**main_kwargs):
     prb1 = doPrb1.ini_calculate()
     if ign_t > ini_t:
         prb1.do_save = False
-        prb1.update_self(t0=ini_t, t1=ign_t, eval_dt=eval_dt, pick_prepare=False)
+        prb1.update_self(t0 = ini_t, t1 = ign_t, eval_dt = eval_dt, pick_prepare = False)
         prb1.do_save = True
-    prb1.update_self(t0=ign_t, t1=max_t, eval_dt=eval_dt)
+    prb1.update_self(t0 = ign_t, t1 = max_t, eval_dt = eval_dt)
     do_hdf5(prb1, **problem_kwargs)
     prb1.hdf5_load()
     export_trajectory2D(prb1)
-    export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
-    export_20220629(prb1, tavr=eval_dt)
+    export_avrPhaseVelocity(prb1, tavr = np.min((10, max_t / 10)))
+    export_20220629(prb1, tavr = eval_dt)
     return True
 
 

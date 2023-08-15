@@ -8,7 +8,7 @@ particle itself, i.e. a fish, a microswimmer, or a bird.
 import abc
 
 import numpy as np
-# from petsc4py import PETSc
+from petsc4py import PETSc
 from act_codeStore.support_fun import warpToPi
 from act_src import baseClass
 from act_src import problemClass
@@ -17,7 +17,7 @@ from act_codeStore.support_class import *
 
 
 class _baseParticle(baseClass.baseObj):
-    def __init__(self, name='...', **kwargs):
+    def __init__(self, name = '...', **kwargs):
         super().__init__(name, **kwargs)
         self._index = -1  # object index
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
@@ -33,8 +33,8 @@ class _baseParticle(baseClass.baseObj):
         self._rot_noise = 0  # rotational noise
         self._trs_noise = 0  # translational noise
         self._dipole = 0  # dipole intensity
-        self._neighbor_list = uniqueList(acceptType=_baseParticle)
-        self._action_list = uniqueList(acceptType=_baseAction)
+        self._neighbor_list = uniqueList(acceptType = _baseParticle)
+        self._action_list = uniqueList(acceptType = _baseAction)
         # print(self._name)
         # print(self._type)
         # print(self._kwargs)
@@ -217,9 +217,9 @@ class _baseParticle(baseClass.baseObj):
     def hdf5_pick(self, handle, **kwargs):
         hdf5_kwargs = self.father.hdf5_kwargs
         obji_hist = handle.create_group(self.name)
-        obji_hist.create_dataset('X_hist', data=self.X_hist, **hdf5_kwargs)
-        obji_hist.create_dataset('U_hist', data=self.U_hist, **hdf5_kwargs)
-        obji_hist.create_dataset('W_hist', data=self.W_hist, **hdf5_kwargs)
+        obji_hist.create_dataset('X_hist', data = self.X_hist, **hdf5_kwargs)
+        obji_hist.create_dataset('U_hist', data = self.U_hist, **hdf5_kwargs)
+        obji_hist.create_dataset('W_hist', data = self.W_hist, **hdf5_kwargs)
         return obji_hist
 
     def hdf5_load(self, handle, **kwargs):
@@ -254,7 +254,7 @@ class _baseParticle(baseClass.baseObj):
 
 
 class particle2D(_baseParticle):
-    def __init__(self, name='...', **kwargs):
+    def __init__(self, name = '...', **kwargs):
         super().__init__(name, **kwargs)
         # self._type = 'particle2D'
         self._dimension = 2  # 2 for 2D
@@ -267,7 +267,7 @@ class particle2D(_baseParticle):
         self._X = np.array((0, 0))  # particle center coordinate
         self._U = np.nan * np.array((0, 0))  # particle translational velocity in global coordinate
         self._W = np.nan * np.array((0,))  # particle rotational velocity in global coordinate
-        self._neighbor_list = uniqueList(acceptType=type(self))
+        self._neighbor_list = uniqueList(acceptType = type(self))
         self.update_phi()
 
     @_baseParticle.father.setter
@@ -352,7 +352,7 @@ class particle2D(_baseParticle):
     def hdf5_pick(self, handle, **kwargs):
         hdf5_kwargs = self.father.hdf5_kwargs
         obji_hist = super().hdf5_pick(handle, **kwargs)
-        obji_hist.create_dataset('phi_hist', data=self.phi_hist, **hdf5_kwargs)
+        obji_hist.create_dataset('phi_hist', data = self.phi_hist, **hdf5_kwargs)
         return obji_hist
 
     def hdf5_load(self, handle, **kwargs):
@@ -384,8 +384,67 @@ class particle2D(_baseParticle):
         return True
 
 
+class ackermann2D(particle2D):
+    # todo: Add command, annotate references, and define all variables wu
+    # reference:May 2017 preprint of Modern Robotics, Lynch and Park, Cambridge U. Press, 2017 http://modernrobotics.org
+    '''
+    l_steer: wheelbase between the front and rear wheels
+    phi_steer: steering angle
+    '''
+
+    # ref, and variable's definition.
+    # deninition of l_steer, phi_steer
+    def __init__(self, l_steer, phi_steer = 0, name = '...', **kwargs):
+        super().__init__(name, **kwargs)
+        self._l_steer = l_steer
+        self._phi_steer = phi_steer
+
+        # historical information
+        # self._l_steer_hist = []  # todo: hist of ..... wu
+        self._phi_steer_hist = []  # todo:... wu
+
+    # todo: add all property wu
+    @property
+    def phi_steer_hist(self):
+        return self._phi_steer_hist
+
+    @property
+    def l_steer(self):
+        return self._l_steer
+
+    @l_steer.setter
+    def l_steer(self, l_steer):
+        # todo: some check wu
+        l_steer = np.array(l_steer)
+        err_msg = 'wrong parameter value: %s '
+        assert self.l_steer.size == 1, err_msg % 'l_steer'
+        err_msg = 'wheelbase must > 0 . '
+        assert l_steer > 0, err_msg
+        self._l_steer = l_steer
+
+    # ....
+    @property
+    def phi_steer(self):
+        return self._phi_steer
+
+    @phi_steer.setter
+    def phi_steer(self, phi_steer):
+        # todo:some check wu
+        # err_msg = 'steering angle must be between -pi and +pi'
+        # assert phi_steer > -np.pi, err_msg
+        # assert phi_steer < np.pi, err_msg
+        self._phi_steer = phi_steer
+
+
+    def update_position(self, X, phi, phi_steer, **kwargs):
+        self.X = X
+        self.phi = warpToPi(phi)
+        self.phi_steer = warpToPi(phi_steer)
+        return True
+
+
 class finiteDipole2D(particle2D):
-    def __init__(self, length, name='...', **kwargs):
+    def __init__(self, length, name = '...', **kwargs):
         super().__init__(name, **kwargs)
         self._Z = np.nan
         self._Zl = np.nan

@@ -55,7 +55,10 @@ class _base_doCalculate(baseClass.baseObj):
 class _base_do2D(_base_doCalculate):
     def ini_kwargs(self):
         super().ini_kwargs()
-        self._kwargs_necessary = self._kwargs_necessary + ['update_fun', 'update_order', 'save_every', 'tqdm_fun']
+        self._kwargs_necessary = self._kwargs_necessary + ['update_fun',
+                                                           'update_order',
+                                                           'save_every',
+                                                           'tqdm_fun']
         return True
 
     def __init__(self, **kwargs):
@@ -147,13 +150,13 @@ class _base_do2D(_base_doCalculate):
         return True
 
     def _set_relation(self):
-        self.problem.relationHandle = self.rltHandle(name='Relation2D', **self.kwargs)
+        self.problem.relationHandle = self.rltHandle(name = 'Relation2D', **self.kwargs)
         return True
 
     def _set_particle(self):
         np.random.seed(self.seed)
         for tun, tln in zip(self.un, self.ln):
-            tptc = self.ptcHandle(length=tln, name='ptc2D')
+            tptc = self.ptcHandle(length = tln, name = 'ptc2D')
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
             # tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
             tptc.X = np.random.uniform(-self.Xlim / 2, self.Xlim / 2, (2,))
@@ -169,44 +172,48 @@ class _base_do2D(_base_doCalculate):
     def addInteraction(self):
         return
 
-    def ini_calculate(self):
-        kwargs = self.kwargs
-        self._problem = self.prbHandle(name=self.fileHandle, **kwargs)
-        spf.petscInfo(self.problem.logger, '#' * 72)
-        spf.petscInfo(self.problem.logger, 'Generate Problem. ')
+    def ini_test_para(self):
         self._un = self._test_para(self.un, 'speed', self.nptc, 'wrong parameter un. ')
         self._ln = self._test_para(self.ln, 'length', self.nptc, 'wrong parameter ln. ')
+        return True
+
+    def ini_calculate(self):
+        kwargs = self.kwargs
+        self._problem = self.prbHandle(name = self.fileHandle, **kwargs)
+        spf.petscInfo(self.problem.logger, '#' * 72)
+        spf.petscInfo(self.problem.logger, 'Generate Problem. ')
+        self.ini_test_para()
         self._set_problem(**kwargs)
         self._set_relation()
         self._set_particle()
         self.addInteraction()
         return self.problem
 
-    def do_calculate(self, max_t, ini_t=0, eval_dt=0.1, ):
+    def do_calculate(self, max_t, ini_t = 0, eval_dt = 0.1, ):
         err_msg = 'wrong parameter eval_dt, eval_dt>0. '
         assert eval_dt > 0, err_msg
         # err_msg = 'wrong parameter nptc, at least 5 particles (nptc > 4).  '
         # assert nptc > 4, err_msg
 
         problem = self.ini_calculate()
-        problem.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
+        problem.update_self(t0 = ini_t, t1 = max_t, eval_dt = eval_dt)
         return problem
 
 
 class do_FiniteDipole2D(_base_do2D):
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.FiniteDipole2D(name='FiniteDipole2D')
+        act2 = interactionClass.FiniteDipole2D(name = 'FiniteDipole2D')
         self.problem.add_act(act2)
         return True
 
 
 class do_LimFiniteDipole2D(do_FiniteDipole2D):
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.limFiniteDipole2D(name='FiniteDipole2D')
+        act2 = interactionClass.limFiniteDipole2D(name = 'FiniteDipole2D')
         self.problem.add_act(act2)
         return True
 
@@ -220,13 +227,13 @@ class do_behaviorParticle2D(_base_do2D):
         return True
 
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
         # act3 = interactionClass.Attract2D(name='Attract2D')
         # self.problem.add_act(act3)
         # act4 = interactionClass.Align2D(name='Align2D')
         # self.problem.add_act(act4)
-        act6 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        act6 = interactionClass.AlignAttract2D(name = 'AlignAttract2D')
         self.problem.add_act(act6)
         return True
 
@@ -255,7 +262,7 @@ class do_behaviorWienerParticle2D(do_behaviorParticle2D):
 
     def addInteraction(self):
         super().addInteraction()
-        act5 = interactionClass.Wiener2D(name='Wiener2D')
+        act5 = interactionClass.Wiener2D(name = 'Wiener2D')
         self.problem.add_act(act5)
         return True
 
@@ -271,7 +278,7 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         libc = CDLL("libc.so.6")
         libc.srand(self.seed)
         for tun, tln in zip(self.un, self.ln):
-            tptc = self.ptcHandle(length=tln, name='ptc2D')
+            tptc = self.ptcHandle(length = tln, name = 'ptc2D')
             tptc.X = np.array((self.Xlim / 2 * libc.rand() / (RAND_MAX + 1.0),
                                self.Xlim / 2 * libc.rand() / (RAND_MAX + 1.0)))
             tptc.phi = np.float64(spf.warpToPi(2 * np.pi * libc.rand() / (RAND_MAX + 1.0)))
@@ -284,7 +291,7 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         return True
 
     def dbg_Attract2D(self):
-        act3 = interactionClass.Attract2D(name='Attract2D')
+        act3 = interactionClass.Attract2D(name = 'Attract2D')
         self.problem.add_act(act3)
 
         self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
@@ -300,7 +307,7 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         return True
 
     def dbg_Align2D(self):
-        act4 = interactionClass.Align2D(name='Align2D')
+        act4 = interactionClass.Align2D(name = 'Align2D')
         self.problem.add_act(act4)
 
         self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
@@ -316,7 +323,7 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         return True
 
     def dbg_AlignAttract2D(self):
-        act6 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        act6 = interactionClass.AlignAttract2D(name = 'AlignAttract2D')
         self.problem.add_act(act6)
 
         self.problem.Xall = np.vstack([objj.X for objj in self.problem.obj_list])
@@ -334,20 +341,20 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
 
 class do_actLimFiniteDipole2D(do_behaviorParticle2D, do_LimFiniteDipole2D):
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.limFiniteDipole2D(name='FiniteDipole2D')
+        act2 = interactionClass.limFiniteDipole2D(name = 'FiniteDipole2D')
         self.problem.add_act(act2)
-        act6 = interactionClass.AlignAttract2D(name='AlignAttract2D')
+        act6 = interactionClass.AlignAttract2D(name = 'AlignAttract2D')
         self.problem.add_act(act6)
         return True
 
 
 class do_actLight2D(do_behaviorParticle2D):
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        actLight = interactionClass.lightAttract2D(name='lightAttract2D')
+        actLight = interactionClass.lightAttract2D(name = 'lightAttract2D')
         self.problem.add_act(actLight)
         return True
 
@@ -359,9 +366,9 @@ class do_phaseLag2D(do_behaviorParticle2D):
         return True
 
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.phaseLag2D(name='phaseLag2D', phaseLag=self.kwargs['phaseLag2D'])
+        act2 = interactionClass.phaseLag2D(name = 'phaseLag2D', phaseLag = self.kwargs['phaseLag2D'])
         self.problem.add_act(act2)
         return True
 
@@ -377,11 +384,11 @@ class do_phaseLag2D_dbg(do_phaseLag2D):
         return True
 
     def addInteraction(self):
-        act1 = interactionClass.selfSpeed2D(name='selfSpeed2D')
+        act1 = interactionClass.selfSpeed2D(name = 'selfSpeed2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.phaseLag2D(name='phaseLag2D', phaseLag=self.kwargs['phaseLag2D'])
+        act2 = interactionClass.phaseLag2D(name = 'phaseLag2D', phaseLag = self.kwargs['phaseLag2D'])
         self.problem.add_act(act2)
-        act5 = interactionClass.Wiener2D(name='Wiener2D')
+        act5 = interactionClass.Wiener2D(name = 'Wiener2D')
         self.problem.add_act(act5)
         return True
 
@@ -404,7 +411,7 @@ class do_phaseLagWiener2D(do_phaseLag2D):
 
     def addInteraction(self):
         super().addInteraction()
-        act5 = interactionClass.Wiener2D(name='Wiener2D')
+        act5 = interactionClass.Wiener2D(name = 'Wiener2D')
         self.problem.add_act(act5)
         return True
 
@@ -426,11 +433,11 @@ class do_phaseLag2D_Wiener(do_phaseLag2D):
         return True
 
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.phaseLag2D_Wiener(name='phaseLag2D_Wiener',
-                                                  phaseLag=self.kwargs['phaseLag2D'],
-                                                  phaseLag_rdm_fct=self.kwargs['phaseLag_rdm_fct'], )
+        act2 = interactionClass.phaseLag2D_Wiener(name = 'phaseLag2D_Wiener',
+                                                  phaseLag = self.kwargs['phaseLag2D'],
+                                                  phaseLag_rdm_fct = self.kwargs['phaseLag_rdm_fct'], )
         self.problem.add_act(act2)
         return True
 
@@ -457,7 +464,7 @@ class do_phaseLagPeriodic2D(do_phaseLag2D, do_actPeriodic2D):
 
         np.random.seed(self.seed)
         for tun, tln in zip(self.un, self.ln):
-            tptc = self.ptcHandle(length=tln, name='ptc2D')
+            tptc = self.ptcHandle(length = tln, name = 'ptc2D')
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
             t1 = tptc.phi - np.pi / 2
             tptc.X = np.hstack((np.cos(t1), np.sin(t1))) * chimera_cycle_radius
@@ -476,12 +483,12 @@ class do_phaseLagPeriodic2D(do_phaseLag2D, do_actPeriodic2D):
         return True
 
     def chimera_overlap(self):
-        points = psd.Bridson_sampling(dims=np.ones(2) * self.Xlim, radius=self.overlap_epsilon * 2, k=30,
-                                      hypersphere_sample=psd.hypersphere_surface_sample)
+        points = psd.Bridson_sampling(dims = np.ones(2) * self.Xlim, radius = self.overlap_epsilon * 2, k = 30,
+                                      hypersphere_sample = psd.hypersphere_surface_sample)
         # print('dbg', points.shape)
-        tidx_list = np.random.choice(points.shape[0], self.nptc, replace=False)
+        tidx_list = np.random.choice(points.shape[0], self.nptc, replace = False)
         for tun, tln, tidx in zip(self.un, self.ln, tidx_list):
-            tptc = self.ptcHandle(length=tln, name='ptc2D')
+            tptc = self.ptcHandle(length = tln, name = 'ptc2D')
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
             tptc.X = points[tidx]
             tptc.u = tun
@@ -514,15 +521,15 @@ class do_phaseLagPeriodic2D_LJ(do_phaseLagPeriodic2D):
         return True
 
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.phaseLag2D(name='phaseLag2D', phaseLag=self.kwargs['phaseLag2D'])
+        act2 = interactionClass.phaseLag2D(name = 'phaseLag2D', phaseLag = self.kwargs['phaseLag2D'])
         self.problem.add_act(act2)
-        act3 = interactionClass.LennardJonePotential2D_point(name='LJ2D_point',
-                                                             A=self.kwargs['LJ_A'],
-                                                             B=self.kwargs['LJ_B'],
-                                                             a=self.kwargs['LJ_a'],
-                                                             b=self.kwargs['LJ_b'])
+        act3 = interactionClass.LennardJonePotential2D_point(name = 'LJ2D_point',
+                                                             A = self.kwargs['LJ_A'],
+                                                             B = self.kwargs['LJ_B'],
+                                                             a = self.kwargs['LJ_a'],
+                                                             b = self.kwargs['LJ_b'])
         self.problem.add_act(act3)
         return True
 
@@ -534,15 +541,15 @@ class do_phaseLag2D_AR(do_phaseLag2D):
         return True
 
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.phaseLag2D(name='phaseLag2D', phaseLag=self.kwargs['phaseLag2D'])
+        act2 = interactionClass.phaseLag2D(name = 'phaseLag2D', phaseLag = self.kwargs['phaseLag2D'])
         self.problem.add_act(act2)
-        act3 = interactionClass.AttractRepulsion2D_point(name='AR2D_point',
-                                                         k1=self.kwargs['AR_k1'],
-                                                         k2=self.kwargs['AR_k2'],
-                                                         k3=self.kwargs['AR_k3'],
-                                                         k4=self.kwargs['AR_k4'])
+        act3 = interactionClass.AttractRepulsion2D_point(name = 'AR2D_point',
+                                                         k1 = self.kwargs['AR_k1'],
+                                                         k2 = self.kwargs['AR_k2'],
+                                                         k3 = self.kwargs['AR_k3'],
+                                                         k4 = self.kwargs['AR_k4'])
         self.problem.add_act(act3)
         return True
 
@@ -579,7 +586,7 @@ class do_phaseLagWiener2D_AR(do_phaseLag2D_AR):
 
     def addInteraction(self):
         super().addInteraction()
-        act5 = interactionClass.Wiener2D(name='Wiener2D')
+        act5 = interactionClass.Wiener2D(name = 'Wiener2D')
         self.problem.add_act(act5)
         return True
 
@@ -617,7 +624,7 @@ class do_dbg_action(_base_do2D):
         np.random.seed(self.seed)
         # robots
         for tun, tln in zip(self.un, self.ln):
-            tptc = self.ptcHandle(length=tln, name='ptc2D')
+            tptc = self.ptcHandle(length = tln, name = 'ptc2D')
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
             # tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
             tptc.X = np.random.uniform(-self.Xlim / 2, self.Xlim / 2, (2,))
@@ -631,16 +638,61 @@ class do_dbg_action(_base_do2D):
         return True
 
     def addInteraction(self):
-        act1 = interactionClass.selfPropelled2D(name='selfPropelled2D')
+        act1 = interactionClass.selfPropelled2D(name = 'selfPropelled2D')
         self.problem.add_act(act1)
-        act2 = interactionClass.FiniteDipole2D(name='FiniteDipole2D')
+        act2 = interactionClass.FiniteDipole2D(name = 'FiniteDipole2D')
         self.problem.add_act(act2)
         return True
 
-    def do_calculate(self, max_t, ini_t=0, eval_dt=0.1, ):
+    def do_calculate(self, max_t, ini_t = 0, eval_dt = 0.1, ):
         err_msg = 'wrong parameter eval_dt, eval_dt>0. '
         assert eval_dt > 0, err_msg
 
         self.addInteraction()
-        self.problem.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
+        self.problem.update_self(t0 = ini_t, t1 = max_t, eval_dt = eval_dt)
         return self.problem
+
+
+class do_ackermann(_base_do2D):
+    def ini_kwargs(self):
+        super().ini_kwargs()
+        err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
+        assert self.kwargs['update_fun'] == "1fe", err_msg
+        err_msg = 'wrong parameter update_order, only (0, 0) is acceptable. '
+        assert self.kwargs['update_order'] == (0, 0), err_msg
+        return True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._l_steer_list = kwargs['l_steer']
+
+    # todo: add property of _l_steer_list wu
+    @property
+    def l_steer_list(self):
+        return self._l_steer_list
+
+
+    def ini_test_para(self):
+        super().ini_test_para()
+        self._l_steer_list = self._test_para(self.l_steer_list, 'l_steer', self.nptc, 'wrong parameter l_steer. ')
+        return True
+
+    def addInteraction(self):
+        act1 = interactionClass.Ackermann2D(name = 'Ackermann2D')
+        self.problem.add_act(act1)
+        return True
+
+    def _set_particle(self):
+        np.random.seed(self.seed)
+        for tun, l_steer in zip(self.un, self.l_steer_list):
+            tptc = self.ptcHandle(l_steer = l_steer, name = 'ackermann2D')
+            tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
+            # tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
+            tptc.X = np.random.uniform(-self.Xlim / 2, self.Xlim / 2, (2,))
+            tptc.u = tun
+            tptc.w = 0
+            self.problem.add_obj(tptc)
+        spf.petscInfo(self.problem.logger, '  All the particles have a unified %s=%f, ' % ('spin', 0))
+        spf.petscInfo(self.problem.logger, '  Generate %d particles with random seed %s' % (self.un.size, self.seed), )
+        spf.petscInfo(self.problem.logger, '  Generate method: random_sample. ')
+        return True

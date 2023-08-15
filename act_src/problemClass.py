@@ -28,15 +28,15 @@ from act_codeStore import support_fun as spf
 
 
 class _baseProblem(baseClass.baseObj):
-    def __init__(self, name='...', tqdm_fun=tqdm_notebook, **kwargs):
+    def __init__(self, name = '...', tqdm_fun = tqdm_notebook, **kwargs):
         super().__init__(name, **kwargs)
         # self._type = 'baseProblem'
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
         self._rot_noise = 0  # rotational noise
         self._trs_noise = 0  # translational noise
-        self._obj_list = uniqueList(acceptType=particleClass._baseParticle)  # contain objects
+        self._obj_list = uniqueList(acceptType = particleClass._baseParticle)  # contain objects
         self._action_list = uniqueList(
-            acceptType=interactionClass._baseAction)  # contain rotational interactions
+            acceptType = interactionClass._baseAction)  # contain rotational interactions
         self._Xall = np.nan  # location at current time
         self._Wall = np.nan  # rotational velocity at current time
         self._Uall = np.nan  # translational velocity at current time
@@ -51,7 +51,7 @@ class _baseProblem(baseClass.baseObj):
             'chunks': True,
             # 'compression': 'lzf',
             # 'compression_opts': 9,
-        }
+            }
 
         # clear dir
         fileHandle = self.name
@@ -64,10 +64,10 @@ class _baseProblem(baseClass.baseObj):
                 tprint = True
             os.makedirs(fileHandle)
             #
-            logging.basicConfig(handlers=[logging.FileHandler(filename=self.log_name, mode='w'),
-                                          logging.StreamHandler()],
-                                level=logging.INFO,
-                                format='%(message)s', )
+            logging.basicConfig(handlers = [logging.FileHandler(filename = self.log_name, mode = 'w'),
+                                            logging.StreamHandler()],
+                                level = logging.INFO,
+                                format = '%(message)s', )
         time.sleep(0.1)
         #
         if tprint:
@@ -300,18 +300,18 @@ class _baseProblem(baseClass.baseObj):
 
     @property
     def polar(self) -> np.asarray:
-        polar = np.linalg.norm(np.sum([obji.P1 for obji in self.obj_list], axis=0)) / self.n_obj
+        polar = np.linalg.norm(np.sum([obji.P1 for obji in self.obj_list], axis = 0)) / self.n_obj
         return polar
 
     @property
     def milling_Daniel2014(self) -> np.asarray:
         t1 = [np.cross(obji.X, obji.P1) / np.linalg.norm(obji.X) for obji in self.obj_list]
-        milling = np.linalg.norm(np.sum(t1, axis=0)) / self.n_obj
+        milling = np.linalg.norm(np.sum(t1, axis = 0)) / self.n_obj
         return milling
 
     @property
     def speed(self) -> np.asarray:
-        speed = np.sum([np.linalg.norm(obji.U) for obji in self.obj_list], axis=0) / self.n_obj
+        speed = np.sum([np.linalg.norm(obji.U) for obji in self.obj_list], axis = 0) / self.n_obj
         return speed
 
     def _check_add_obj(self, obj):
@@ -335,7 +335,7 @@ class _baseProblem(baseClass.baseObj):
         # assert isinstance(act, interaction.WAction), err_msg
         pass
 
-    def add_act(self, act: "interactionClass._baseAction", add_all_obj=True):
+    def add_act(self, act: "interactionClass._baseAction", add_all_obj = True):
         self._check_add_act(act)
         self.action_list.append(act)
         act.father = self
@@ -350,7 +350,7 @@ class _baseProblem(baseClass.baseObj):
         assert isinstance(pos, relationClass._baseRelation), err_msg
         # pass
 
-    def update_prepare(self, showInfo=True):
+    def update_prepare(self, showInfo = True):
         # location
         self._obj_list = np.array(self.obj_list)
         self.Xall = np.vstack([objj.X for objj in self.obj_list])
@@ -389,17 +389,28 @@ class _baseProblem(baseClass.baseObj):
 
     def check_self(self, **kwargs):
         # todo: check all parameters.
-        err_msg = 'wrong parameter value: %s '
+
+        err_msg = 'Length must be limited'
+        #assert np.isfinite(self.length), err_msg % 'length'
+
+        err_msg = 'Dimension must be 2 or 3 dimensions'
         assert self.dimension in (2, 3), err_msg % 'dimension'
+
+        err_msg = '**kwargs must be limited'
+       # assert np.isfinite(self.length), err_msg % '**kwargs'
+
+
 
         for obji in self.obj_list:  # type: particleClass._baseParticle
             obji.check_self()
+
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.check_self()
+
         self.relationHandle.check_self()
         return True
 
-    def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001, pick_prepare=True):
+    def update_self(self, t1, t0 = 0, max_it = 10 ** 9, eval_dt = 0.001, pick_prepare = True):
         spf.petscInfo(self.logger, ' ')
         spf.petscInfo(self.logger, 'Solve, start time: %s' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -414,15 +425,15 @@ class _baseProblem(baseClass.baseObj):
         self.percentage = 0
         self.update_prepare()
         if self.rank0:
-            self.tqdm = tqdm_fun(total=100, desc='  %s' % self.name)
+            self.tqdm = tqdm_fun(total = 100, desc = '  %s' % self.name)
 
         # do simulation
         y0 = self._get_y0()
-        y = PETSc.Vec().createWithArray(y0, comm=self.comm)
+        y = PETSc.Vec().createWithArray(y0, comm = self.comm)
         f = y.duplicate()
         # print(f)
         # print(1111)
-        ts = PETSc.TS().create(comm=self.comm)
+        ts = PETSc.TS().create(comm = self.comm)
         ts.setProblemType(ts.ProblemType.NONLINEAR)
         ts.setType(ts.Type.RK)
         ts.setRKType(update_fun)
@@ -563,7 +574,7 @@ class _baseProblem(baseClass.baseObj):
         rank = comm.Get_rank()
         if rank == 0:
             with open(self.pickle_name, 'wb') as handle:
-                pickle.dump(self, handle, protocol=4)
+                pickle.dump(self, handle, protocol = 4)
         spf.petscInfo(self.logger, 'Pick problem: %s ' % self.pickle_name)
         return True
 
@@ -575,14 +586,14 @@ class _baseProblem(baseClass.baseObj):
             hdf5_kwargs = self.hdf5_kwargs
             with h5py.File(self.hdf5_name, 'w') as handle:
                 prb_hist = handle.create_group(self.name)
-                prb_hist.create_dataset('t_hist', data=self.t_hist, **hdf5_kwargs)
-                prb_hist.create_dataset('dt_hist', data=self.dt_hist, **hdf5_kwargs)
+                prb_hist.create_dataset('t_hist', data = self.t_hist, **hdf5_kwargs)
+                prb_hist.create_dataset('dt_hist', data = self.dt_hist, **hdf5_kwargs)
                 for obji in self.obj_list:  # type: particleClass._baseParticle
                     obji.hdf5_pick(handle, **kwargs)
         spf.petscInfo(self.logger, 'Pick HDF5 file: %s ' % self.hdf5_name)
         return True
 
-    def hdf5_load(self, hdf5_name=None, showInfo=False, **kwargs):
+    def hdf5_load(self, hdf5_name = None, showInfo = False, **kwargs):
         comm = PETSc.COMM_WORLD.tompi4py()
         rank = comm.Get_rank()
 
@@ -603,7 +614,7 @@ class _baseProblem(baseClass.baseObj):
         self.relationHandle.father = self
         for act in self.action_list:
             act.father = self
-        self.update_prepare(showInfo=showInfo)
+        self.update_prepare(showInfo = showInfo)
 
         if showInfo:
             spf.petscInfo(self.logger, ' ')
@@ -639,11 +650,11 @@ class _baseProblem(baseClass.baseObj):
 
 
 class _base2DProblem(_baseProblem):
-    def __init__(self, name='...', **kwargs):
+    def __init__(self, name = '...', **kwargs):
         super().__init__(name, **kwargs)
         self._Phiall = np.nan
         self._dimension = 2  # 2 for 2D
-        self._action_list = uniqueList(acceptType=interactionClass._baseAction2D)  # contain rotational interactions
+        self._action_list = uniqueList(acceptType = interactionClass._baseAction2D)  # contain rotational interactions
 
     @property
     def Phiall(self):
@@ -659,9 +670,9 @@ class _base2DProblem(_baseProblem):
         assert isinstance(obj, particleClass.particle2D), err_msg
         return True
 
-    def update_prepare(self, showInfo=True):
+    def update_prepare(self, showInfo = True):
         self.Phiall = np.vstack([objj.phi for objj in self.obj_list])
-        super().update_prepare(showInfo=showInfo)
+        super().update_prepare(showInfo = showInfo)
         return True
 
     def update_position(self, **kwargs):
@@ -689,7 +700,7 @@ class _base2DProblem(_baseProblem):
         return y0
 
     def Y2Xphi(self, Y):
-        y = self.vec_scatter(Y, destroy=False)
+        y = self.vec_scatter(Y, destroy = False)
         nobj = self.n_obj
         dim = self.dimension
         X_size = dim * nobj
@@ -724,7 +735,7 @@ class _base2DProblem(_baseProblem):
         if self.rank0:
             figsize, dpi = np.array((1, 1)) * 3, 200
 
-            fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+            fig, axi = plt.subplots(1, 1, figsize = figsize, dpi = dpi, constrained_layout = True)
             fig.patch.set_facecolor('white')
             axi.plot(self.Xall[:, 0], self.Xall[:, 1], '.')
             plt.show()
@@ -735,7 +746,7 @@ class _base2DProblem(_baseProblem):
             figsize, dpi = np.array((1, 1)) * 3, 200
             fct = 0.2
 
-            fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+            fig, axi = plt.subplots(1, 1, figsize = figsize, dpi = dpi, constrained_layout = True)
             fig.patch.set_facecolor('white')
             axi.quiver(self.Xall[:, 0], self.Xall[:, 1],
                        fct * np.cos(self.Phiall), fct * np.sin(self.Phiall))
@@ -760,7 +771,7 @@ class limFiniteDipole2DProblem(_base2DProblem):
 
 
 class behavior2DProblem(_base2DProblem):
-    def __init__(self, name='...', **kwargs):
+    def __init__(self, name = '...', **kwargs):
         super().__init__(name, **kwargs)
         self._attract = np.nan  # attract intensity
         self._align = np.nan  # align intensity
@@ -828,7 +839,7 @@ class actLimFiniteDipole2DProblem(behavior2DProblem, limFiniteDipole2DProblem):
 
 
 class periodic2DProblem(_base2DProblem):
-    def __init__(self, name='...', Xrange=1, **kwargs):
+    def __init__(self, name = '...', Xrange = 1, **kwargs):
         super().__init__(name, **kwargs)
         self._Xrange = Xrange
         self._halfXrange = Xrange / 2
@@ -862,3 +873,71 @@ class actPeriodic2DProblem(periodic2DProblem, behavior2DProblem):
     # class actPeriodic2DProblem(behavior2DProblem):
     def _nothing(self):
         pass
+
+
+class Ackermann2DProblem(_base2DProblem):
+    def __init__(self, name = '...', **kwargs):
+        super().__init__(name, **kwargs)
+        self._Phi_steer_all = np.nan
+
+    @property
+    def Phi_steer_all(self):
+        return self._Phi_steer_all
+
+    @Phi_steer_all.setter
+    def Phi_steer_all(self, Phi_steer_all):
+        self._Phi_steer_all = Phi_steer_all
+
+    def _check_add_obj(self, obj):
+        super()._check_add_obj(obj)
+        err_msg = 'wrong object type'
+        assert isinstance(obj, particleClass.ackermann2D), err_msg
+        return True
+
+    def update_prepare(self, showInfo = True):
+        self.Phi_steer_all = np.vstack([objj.phi_steer for objj in self.obj_list])
+        super().update_prepare(showInfo = showInfo)
+        return True
+
+    def update_position(self, **kwargs):
+        obji: particleClass.ackermann2D
+        Xi: np.ndarray
+        phii: np.ndarray
+        for obji, Xi, phii, phi_steeri in zip(self.obj_list, self.Xall, self.Phiall, self.Phi_steer_all):
+            obji.update_position(Xi, phii, phi_steer = phi_steeri)
+        return True
+
+    def _get_y0(self, **kwargs):
+        X_all, phi_all, phi_steer_all = [], [], []
+        for obji in self.obj_list:
+            X_all.append(obji.X)
+            phi_all.append(obji.phi)
+            phi_steer_all.append(obji.phi_steer)
+        y0 = np.hstack([np.hstack(X_all), np.hstack(phi_all), np.hstack(phi_steer_all)])
+        return y0
+
+    def Y2Xphi(self, Y):
+        y = self.vec_scatter(Y, destroy = False)
+        nobj = self.n_obj
+        dim = self.dimension
+        X_size = dim * nobj
+        X_all = y[0:X_size]
+        phi_all = y[X_size:X_size + nobj]
+        phi_steer_all = y[X_size + nobj:]
+        return X_all, phi_all, phi_steer_all
+
+    def _rhsfunction(self, ts, t, Y, F):
+        # structure:
+        #   Y = [X_all, phi_all]
+        #   F = [U_all, W_all]
+        X_all, phi_all, phi_steer_all = self.Y2Xphi(Y)
+        self.Xall = X_all.reshape((-1, self.dimension))
+        self.Phiall = phi_all
+        self.Phi_steer_all = phi_steer_all
+        self.update_position()
+        self.update_UWall(F)
+        tF = self.vec_scatter(F)
+        self.Uall = tF[:self.dimension * self.n_obj].reshape((-1, self.dimension))
+        self.Wall = tF[self.dimension * self.n_obj:]
+        self.update_velocity()
+        return True
