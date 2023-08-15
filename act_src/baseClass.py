@@ -17,7 +17,7 @@ from act_codeStore import support_fun as spf
 
 
 class baseObj:
-    def __init__(self, name='...', **kwargs):
+    def __init__(self, name="...", **kwargs):
         self._name = name
         self._kwargs = kwargs
         # self._type = '...'
@@ -71,18 +71,23 @@ class baseObj:
 
     def print_info(self):
         # OptDB = PETSc.Options()
-        spf.petscInfo(self.father.logger, ' ')
-        spf.petscInfo(self.father.logger, 'Information about %s (%s): ' % (str(self), self.type,))
+        spf.petscInfo(self.father.logger, " ")
+        spf.petscInfo(
+            self.father.logger,
+            "Information about %s (%s): "
+            % (
+                str(self),
+                self.type,
+            ),
+        )
         return True
 
     @staticmethod
-    def vec_scatter(vec_petsc, destroy=True):
+    def vec_scatter(vec_petsc):
         scatter, temp = PETSc.Scatter().toAll(vec_petsc)
         scatter.scatterBegin(vec_petsc, temp, False, PETSc.Scatter.Mode.FORWARD)
         scatter.scatterEnd(vec_petsc, temp, False, PETSc.Scatter.Mode.FORWARD)
         vec = temp.getArray()
-        if destroy:
-            vec_petsc.destroy()
         return vec
 
     def destroy_self(self, **kwargs):

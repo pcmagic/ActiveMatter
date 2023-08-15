@@ -24,7 +24,9 @@ from act_codeStore import support_fun as spf
 class _baseAction(baseClass.baseObj):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._obj_list = uniqueList(acceptType = particleClass._baseParticle)  # contain objects
+        self._obj_list = uniqueList(
+            acceptType=particleClass._baseParticle
+        )  # contain objects
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
         self._dmda = None
 
@@ -45,9 +47,9 @@ class _baseAction(baseClass.baseObj):
         return self._dmda
 
     def _check_add_obj(self, obj):
-        err_msg = 'wrong object type'
+        err_msg = "wrong object type"
         assert isinstance(obj, particleClass._baseParticle), err_msg
-        err_msg = 'wrong dimension'
+        err_msg = "wrong dimension"
         assert np.isclose(self.dimension, obj.dimension), err_msg
         return True
 
@@ -68,7 +70,9 @@ class _baseAction(baseClass.baseObj):
         return True
 
     def set_dmda(self):
-        self._dmda = PETSc.DMDA().create(sizes = (self.n_obj,), dof = 1, stencil_width = 0, comm = PETSc.COMM_WORLD)
+        self._dmda = PETSc.DMDA().create(
+            sizes=(self.n_obj,), dof=1, stencil_width=0, comm=PETSc.COMM_WORLD
+        )
         self._dmda.setFromOptions()
         self._dmda.setUp()
         return True
@@ -104,7 +108,7 @@ class _baseAction(baseClass.baseObj):
 
     def print_info(self):
         super().print_info()
-        spf.petscInfo(self.father.logger, '  None')
+        spf.petscInfo(self.father.logger, "  None")
         return True
 
 
@@ -112,7 +116,9 @@ class _baseAction2D(_baseAction):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._dimension = 2  # 2 for 2D
-        self._obj_list = uniqueList(acceptType = particleClass.particle2D)  # contain objects
+        self._obj_list = uniqueList(
+            acceptType=particleClass.particle2D
+        )  # contain objects
 
     def update_action(self, F):
         nobj = self.n_obj
@@ -129,8 +135,8 @@ class _baseAction2D(_baseAction):
             i1 = obji.index
             u, w = self.update_each_action(obji)
             # print('dbg', i1, obji, u, w)
-            F.setValues((dimension * i1, dimension * i1 + 1), u, addv = True)
-            F.setValue(idxW0 + i0, w, addv = True)
+            F.setValues((dimension * i1, dimension * i1 + 1), u, addv=True)
+            F.setValue(idxW0 + i0, w, addv=True)
             # print('dbg', i0, [obji.X for obji in obj_list])
         # if self.type == 'phaseLag2D':
         #     print(F[:])
@@ -152,7 +158,7 @@ class selfSpeed2D(_baseAction2D):
 class Dipole2D(_baseAction2D):
     def check_self(self, **kwargs):
         prb = self.father  # type: problemClass.behavior2DProblem
-        err_msg = 'action %s needs at least two particles. ' % type(self).__name__
+        err_msg = "action %s needs at least two particles. " % type(self).__name__
         assert prb.n_obj > 1, err_msg
         return True
 
@@ -170,9 +176,11 @@ class Dipole2D(_baseAction2D):
             tth = theta_ij[obji_idx, objj_idx]
             trho = rho_ij[obji_idx, objj_idx]
             te_rho = e_rho_ij[obji_idx, objj_idx]
-            t1 = np.dot(np.array(((np.cos(tth), -np.sin(tth)),
-                                  (np.sin(tth), np.cos(tth)))), te_rho)
-            uij = (objj.dipole * obji.u / np.pi) * (t1 / trho ** 2)
+            t1 = np.dot(
+                np.array(((np.cos(tth), -np.sin(tth)), (np.sin(tth), np.cos(tth)))),
+                te_rho,
+            )
+            uij = (objj.dipole * obji.u / np.pi) * (t1 / trho**2)
             Ui += uij
         assert 1 == 2
         return Ui
@@ -183,10 +191,10 @@ class FiniteDipole2D(Dipole2D):
         super().check_self()
 
         prb = self.father  # type: problemClass.behavior2DProblem
-        err_handle = 'wrong particle type. particle name: %s, current type: %s, expect type: %s. '
+        err_handle = "wrong particle type. particle name: %s, current type: %s, expect type: %s. "
 
         # todo: modify prb.obj_list
-        def __init__(self, name = '...', **kwargs):
+        def __init__(self, name="...", **kwargs):
             super().__init__(name, **kwargs)
             # self._type = 'particle2D'
             self._dimension = 2  # 2 for 2D
@@ -197,9 +205,13 @@ class FiniteDipole2D(Dipole2D):
             self._phi_hist = []  # major norm P1, for 2D version
 
             self._X = np.array((0, 0))  # particle center coordinate
-            self._U = np.nan * np.array((0, 0))  # particle translational velocity in global coordinate
-            self._phi_steer = np.nan * np.array((0,))  # particle rotational velocity in global coordinate
-            self._neighbor_list = uniqueList(acceptType = type(self))
+            self._U = np.nan * np.array(
+                (0, 0)
+            )  # particle translational velocity in global coordinate
+            self._phi_steer = np.nan * np.array(
+                (0,)
+            )  # particle rotational velocity in global coordinate
+            self._neighbor_list = uniqueList(acceptType=type(self))
             self.update_phi()
 
         @_baseAction.father.setter
@@ -233,7 +245,7 @@ class FiniteDipole2D(Dipole2D):
         @phi.setter
         def phi(self, phi):
             # phi = np.hstack((phi,))
-            err_msg = 'phi is a scale. '
+            err_msg = "phi is a scale. "
             assert phi.size == 1, err_msg
             assert -np.pi <= phi <= np.pi, phi
             self._phi = phi
@@ -241,7 +253,7 @@ class FiniteDipole2D(Dipole2D):
 
         @_baseAction.phi_steer.setter
         def phi_steer(self, phi_steer):
-            err_msg = 'phi_steer is a scale. '
+            err_msg = "phi_steer is a scale. "
             assert phi_steer.size == 1, err_msg
             _baseAction.phi_steer.fset(self, phi_steer)
 
@@ -277,28 +289,30 @@ class FiniteDipole2D(Dipole2D):
         def hdf5_pick(self, handle, **kwargs):
             hdf5_kwargs = self.father.hdf5_kwargs
             obji_hist = super().hdf5_pick(handle, **kwargs)
-            obji_hist.create_dataset('phi_hist', data = self.phi_hist, **hdf5_kwargs)
+            obji_hist.create_dataset("phi_hist", data=self.phi_hist, **hdf5_kwargs)
             return obji_hist
 
         def hdf5_load(self, handle, **kwargs):
             obji_hist = super().hdf5_load(handle, **kwargs)
-            self._phi_hist = obji_hist['phi_hist'][:]
+            self._phi_hist = obji_hist["phi_hist"][:]
             return obji_hist
 
         def check_self(self, **kwargs):
             super().check_self()
-            err_msg = 'wrong parameter value: %s '
-            assert self.dimension in (2,), err_msg % 'dimension'
-            assert isinstance(self.father, problemClass._base2DProblem), err_msg % 'father'
-            assert self.X.shape == (2,), err_msg % 'X'
-            assert self.U.shape == (2,), err_msg % 'U'
-            assert self.phi_steer.size == 1, err_msg % 'W'
+            err_msg = "wrong parameter value: %s "
+            assert self.dimension in (2,), err_msg % "dimension"
+            assert isinstance(self.father, problemClass._base2DProblem), (
+                err_msg % "father"
+            )
+            assert self.X.shape == (2,), err_msg % "X"
+            assert self.U.shape == (2,), err_msg % "U"
+            assert self.phi_steer.size == 1, err_msg % "W"
             for obji in self.neighbor_list:
-                assert isinstance(obji, interaction2D), err_msg % 'neighbor_list'
-            assert np.isfinite(self.P1).all(), err_msg % 'P1'
-            assert self.P1.shape == (2,), err_msg % 'P1'
-            assert isinstance(self.phi, np.float64), err_msg % 'phi'
-            assert np.isfinite(self.phi), err_msg % 'phi'
+                assert isinstance(obji, interaction2D), err_msg % "neighbor_list"
+            assert np.isfinite(self.P1).all(), err_msg % "P1"
+            assert self.P1.shape == (2,), err_msg % "P1"
+            assert isinstance(self.phi, np.float64), err_msg % "phi"
+            assert np.isfinite(self.phi), err_msg % "phi"
             return True
 
         def update_finish(self):
@@ -309,7 +323,7 @@ class FiniteDipole2D(Dipole2D):
             return True
 
         for obji in prb.obj_list:  # type: particleClass._baseParticle
-            err_msg = err_handle % (obji.index, obji.type, 'finiteDipole2D')
+            err_msg = err_handle % (obji.index, obji.type, "finiteDipole2D")
             assert isinstance(obji, particleClass.finiteDipole2D), err_msg
         return True
 
@@ -338,10 +352,10 @@ class limFiniteDipole2D(FiniteDipole2D):
         super().check_self()
 
         prb = self.father  # type: problemClass.behavior2DProblem
-        err_handle = 'wrong particle type. particle name: %s, current type: %s, expect type: %s. '
+        err_handle = "wrong particle type. particle name: %s, current type: %s, expect type: %s. "
         # todo: modify prb.obj_list
         for obji in prb.obj_list:  # type: particleClass._baseParticle
-            err_msg = err_handle % (obji.index, obji.type, 'limFiniteDipole2D')
+            err_msg = err_handle % (obji.index, obji.type, "limFiniteDipole2D")
             assert isinstance(obji, particleClass.limFiniteDipole2D), err_msg
         return True
 
@@ -480,12 +494,12 @@ class Wiener2D(_baseAction2D):
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        spf.petscInfo(self.father.logger, '  sqrt_dt=%f' % self.sqrt_dt)
+        spf.petscInfo(self.father.logger, "  sqrt_dt=%f" % self.sqrt_dt)
         return True
 
 
 class phaseLag2D(_baseAction2D):
-    def __init__(self, phaseLag = 0, **kwargs):
+    def __init__(self, phaseLag=0, **kwargs):
         super().__init__(**kwargs)
         self._phaseLag = phaseLag
 
@@ -500,19 +514,24 @@ class phaseLag2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
         phaseLag = self.phaseLag
         Ui = np.zeros(2)
-        Wi = obji.align * np.mean([np.sin(objj.phi - obji.phi - phaseLag)
-                                   for objj in obji.neighbor_list]) \
-            if obji.neighbor_list else 0
+        Wi = (
+            obji.align
+            * np.mean(
+                [np.sin(objj.phi - obji.phi - phaseLag) for objj in obji.neighbor_list]
+            )
+            if obji.neighbor_list
+            else 0
+        )
         return Ui, Wi
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        spf.petscInfo(self.father.logger, '  phaseLag=%f' % self.phaseLag)
+        spf.petscInfo(self.father.logger, "  phaseLag=%f" % self.phaseLag)
         return True
 
 
 class phaseLag2D_Wiener(phaseLag2D):
-    def __init__(self, phaseLag_rdm_fct = 0, **kwargs):
+    def __init__(self, phaseLag_rdm_fct=0, **kwargs):
         super().__init__(**kwargs)
         self._phaseLag_rdm_fct = phaseLag_rdm_fct
 
@@ -541,10 +560,17 @@ class phaseLag2D_Wiener(phaseLag2D):
         #     if obji.neighbor_list else 0
         #
         phaseLag_random = phaseLag_rdm_fct * np.random.normal()
-        Wi = obji.align * np.mean(
-            [np.sin(objj.phi - obji.phi - phaseLag - phaseLag_random)
-             for objj in obji.neighbor_list]) \
-            if obji.neighbor_list else 0
+        Wi = (
+            obji.align
+            * np.mean(
+                [
+                    np.sin(objj.phi - obji.phi - phaseLag - phaseLag_random)
+                    for objj in obji.neighbor_list
+                ]
+            )
+            if obji.neighbor_list
+            else 0
+        )
         #
         # phaseLag_random = phaseLag_rdm_fct * np.random.normal()
         # Wi = obji.align  * np.mean(
@@ -563,13 +589,16 @@ class phaseLag2D_Wiener(phaseLag2D):
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        spf.petscInfo(self.father.logger, '  phaseLag=%f, phaseLag_random=%f' %
-                      (self.phaseLag, self.phaseLag_rdm_fct))
+        spf.petscInfo(
+            self.father.logger,
+            "  phaseLag=%f, phaseLag_random=%f"
+            % (self.phaseLag, self.phaseLag_rdm_fct),
+        )
         return True
 
 
 class LennardJonePotential2D_point(_baseAction2D):
-    def __init__(self, A = 0, B = 0, a = 12, b = 6, **kwargs):
+    def __init__(self, A=0, B=0, a=12, b=6, **kwargs):
         super().__init__(**kwargs)
         self._A = A
         self._B = B
@@ -624,7 +653,9 @@ class LennardJonePotential2D_point(_baseAction2D):
         trho[obji_idx] = np.inf
         tphi = theta_ij[obji_idx, :] + obji.phi
 
-        t1 = self.a * self.A * trho ** (-1 - self.a) - self.b * self.B * trho ** (-1 - self.b)
+        t1 = self.a * self.A * trho ** (-1 - self.a) - self.b * self.B * trho ** (
+            -1 - self.b
+        )
         # t1[obji_idx] = 0
         Ui = -np.array((np.mean(t1 * np.cos(tphi)), np.mean(t1 * np.sin(tphi))))
         Wi = np.zeros(1)
@@ -632,12 +663,15 @@ class LennardJonePotential2D_point(_baseAction2D):
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        spf.petscInfo(self.father.logger, '  A=%e, B=%e, a=%e, b=%e' % (self.A, self.B, self.a, self.b))
+        spf.petscInfo(
+            self.father.logger,
+            "  A=%e, B=%e, a=%e, b=%e" % (self.A, self.B, self.a, self.b),
+        )
         return True
 
 
 class AttractRepulsion2D_point(_baseAction2D):
-    def __init__(self, k1 = -1, k2 = -1, k3 = 1, k4 = 2, **kwargs):
+    def __init__(self, k1=-1, k2=-1, k3=1, k4=2, **kwargs):
         super().__init__(**kwargs)
         self._k1 = k1
         self._k2 = k2
@@ -679,7 +713,7 @@ class AttractRepulsion2D_point(_baseAction2D):
     def fun_fAR(self, r, obji_idx):
         # k1 * r ** k2 + k3 * r ** k4
         r[obji_idx] = np.nan
-        v = self.k1 * r ** self.k2 + self.k3 * r ** self.k4
+        v = self.k1 * r**self.k2 + self.k3 * r**self.k4
         v[obji_idx] = 0
         return v
 
@@ -692,11 +726,20 @@ class AttractRepulsion2D_point(_baseAction2D):
         neighbor_idx_list = [objj.index for objj in obji.neighbor_list]
 
         if len(obji.neighbor_list) > 0:
-            tphi = np.array([theta_ij[obji_idx, index] for index in neighbor_idx_list]) + obji.phi
-            Vi = np.array([self.k1 * rho_ij[obji_idx, index] ** self.k2 + \
-                           self.k3 * rho_ij[obji_idx, index] ** self.k4
-                           for index in neighbor_idx_list])
-            Ui = np.array((np.mean(Vi * np.cos(tphi)), np.mean(Vi * np.sin(tphi)))) + np.zeros(2)
+            tphi = (
+                np.array([theta_ij[obji_idx, index] for index in neighbor_idx_list])
+                + obji.phi
+            )
+            Vi = np.array(
+                [
+                    self.k1 * rho_ij[obji_idx, index] ** self.k2
+                    + self.k3 * rho_ij[obji_idx, index] ** self.k4
+                    for index in neighbor_idx_list
+                ]
+            )
+            Ui = np.array(
+                (np.mean(Vi * np.cos(tphi)), np.mean(Vi * np.sin(tphi)))
+            ) + np.zeros(2)
         else:
             Ui = np.zeros(2)
         Wi = np.zeros(1)
@@ -704,8 +747,11 @@ class AttractRepulsion2D_point(_baseAction2D):
 
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        spf.petscInfo(self.father.logger, '  v = k1 * r ** k2 + k3 * r ** k4')
-        spf.petscInfo(self.father.logger, '  k1=%e, k2=%e, k3=%e, k4=%e' % (self.k1, self.k2, self.k3, self.k4))
+        spf.petscInfo(self.father.logger, "  v = k1 * r ** k2 + k3 * r ** k4")
+        spf.petscInfo(
+            self.father.logger,
+            "  k1=%e, k2=%e, k3=%e, k4=%e" % (self.k1, self.k2, self.k3, self.k4),
+        )
         return True
 
 
@@ -716,21 +762,16 @@ class Ackermann2D(_baseAction2D):
         dmda = self.dmda
         obj_list = self.obj_list
 
-        # Uall = np.zeros((nobj * dimension))
-        # Wall = np.zeros((nobj))
         idxW0 = dimension * nobj
+        idxW_steer0 = (dimension + 1) * nobj
         for i0 in range(dmda.getRanges()[0][0], dmda.getRanges()[0][1]):
-            # print(i0)
             obji = obj_list[i0]
             i1 = obji.index
             u, w, w_steer = self.update_each_action(obji)
-            assert 1 == 2
             # print('dbg', i1, obji, u, w)
-            F.setValues((dimension * i1, dimension * i1 + 1), u, addv = True)
-            F.setValue(idxW0 + i0, w, addv = True)
-            # print('dbg', i0, [obji.X for obji in obj_list])
-            # if self.type == 'phaseLag2D':
-            #     print(F[:])
+            F.setValues((dimension * i1, dimension * i1 + 1), u, addv=True)
+            F.setValue(idxW0 + i0, w, addv=True)
+            F.setValue(idxW_steer0 + i0, w_steer, addv=True)
         return True
 
     def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
@@ -750,6 +791,10 @@ class Ackermann2D(_baseAction2D):
         # \end{algorithm}\DecMargin{1em}
         # \end{document}
 
+        # U -> vehicle velocity
+        # w -> vehicle spin
+        # obj.w -> steer spin
         U = obji.u * obji.P1
-        w = np.tan(obji.phi_steer) * obji.u / obji.l_steer
-        return U, w, obji.w
+        W = np.tan(obji.phi_steer) * obji.u / obji.l_steer
+        W_steer = obji.w_steer
+        return U, W, W_steer

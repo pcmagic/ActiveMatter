@@ -17,11 +17,11 @@ from act_codeStore.support_class import *
 
 
 class _baseParticle(baseClass.baseObj):
-    def __init__(self, name = '...', **kwargs):
+    def __init__(self, name="...", **kwargs):
         super().__init__(name, **kwargs)
         self._index = -1  # object index
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
-        self._u = 0  # particle velocity
+        self._u = 0  # particle speed
         self._X = np.nan  # particle center position
         self._U = np.nan  # particle translational velocity in global coordinate
         self._W = np.nan  # particle rotational velocity in global coordinate
@@ -33,8 +33,8 @@ class _baseParticle(baseClass.baseObj):
         self._rot_noise = 0  # rotational noise
         self._trs_noise = 0  # translational noise
         self._dipole = 0  # dipole intensity
-        self._neighbor_list = uniqueList(acceptType = _baseParticle)
-        self._action_list = uniqueList(acceptType = _baseAction)
+        self._neighbor_list = uniqueList(acceptType=_baseParticle)
+        self._action_list = uniqueList(acceptType=_baseAction)
         # print(self._name)
         # print(self._type)
         # print(self._kwargs)
@@ -47,11 +47,11 @@ class _baseParticle(baseClass.baseObj):
         self._W_hist = []  # total rotational velocity in global coordinate.
 
     def __repr__(self):
-        return '%s_%04d' % (self._type, self.index)
+        return "%s_%04d" % (self._type, self.index)
 
     @property
     def name(self):
-        t1 = '%s_%04d' % (self._name, self.index)
+        t1 = "%s_%04d" % (self._name, self.index)
         return t1
 
     @property
@@ -81,7 +81,7 @@ class _baseParticle(baseClass.baseObj):
 
     @u.setter
     def u(self, u):
-        err_msg = 'u is a scale. '
+        err_msg = "u is a scale. "
         assert u.size == 1, err_msg
         self._u = u
 
@@ -92,7 +92,7 @@ class _baseParticle(baseClass.baseObj):
     @X.setter
     def X(self, X):
         self._X = np.array(X)
-        err_msg = 'X is a vector with %d components. ' % self.dimension
+        err_msg = "X is a vector with %d components. " % self.dimension
         assert self._X.size == self.dimension, err_msg
 
     @property
@@ -102,7 +102,7 @@ class _baseParticle(baseClass.baseObj):
     @U.setter
     def U(self, U):
         self._U = np.array(U)
-        err_msg = 'U is a vector with %d components. ' % self.dimension
+        err_msg = "U is a vector with %d components. " % self.dimension
         assert self._U.size == self.dimension, err_msg
 
     @property
@@ -121,7 +121,7 @@ class _baseParticle(baseClass.baseObj):
     def P1(self, P1):
         P1 = np.array(P1)
         self._P1 = P1.ravel() / np.linalg.norm(P1)
-        err_msg = 'P1 is a vector with %d components. ' % self.dimension
+        err_msg = "P1 is a vector with %d components. " % self.dimension
         assert self._P1.size == self.dimension, err_msg
 
     @property
@@ -130,7 +130,7 @@ class _baseParticle(baseClass.baseObj):
 
     @attract.setter
     def attract(self, attract):
-        err_msg = 'attract is a scale. '
+        err_msg = "attract is a scale. "
         assert attract.size == 1, err_msg
         self._attract = attract
 
@@ -140,7 +140,7 @@ class _baseParticle(baseClass.baseObj):
 
     @align.setter
     def align(self, align):
-        err_msg = 'align is a scale. '
+        err_msg = "align is a scale. "
         assert align.size == 1, err_msg
         self._align = align
 
@@ -217,33 +217,33 @@ class _baseParticle(baseClass.baseObj):
     def hdf5_pick(self, handle, **kwargs):
         hdf5_kwargs = self.father.hdf5_kwargs
         obji_hist = handle.create_group(self.name)
-        obji_hist.create_dataset('X_hist', data = self.X_hist, **hdf5_kwargs)
-        obji_hist.create_dataset('U_hist', data = self.U_hist, **hdf5_kwargs)
-        obji_hist.create_dataset('W_hist', data = self.W_hist, **hdf5_kwargs)
+        obji_hist.create_dataset("X_hist", data=self.X_hist, **hdf5_kwargs)
+        obji_hist.create_dataset("U_hist", data=self.U_hist, **hdf5_kwargs)
+        obji_hist.create_dataset("W_hist", data=self.W_hist, **hdf5_kwargs)
         return obji_hist
 
     def hdf5_load(self, handle, **kwargs):
         obji_hist = handle[self.name]
-        self._X_hist = obji_hist['X_hist'][:]
-        self._U_hist = obji_hist['U_hist'][:]
-        self._W_hist = obji_hist['W_hist'][:]
+        self._X_hist = obji_hist["X_hist"][:]
+        self._U_hist = obji_hist["U_hist"][:]
+        self._W_hist = obji_hist["W_hist"][:]
         return obji_hist
 
     def check_self(self, **kwargs):
-        err_msg = 'wrong parameter value: %s '
+        err_msg = "wrong parameter value: %s "
 
-        assert self.index >= 0, err_msg % 'index'
-        assert self.dimension in (2, 3), err_msg % 'dimension'
-        assert isinstance(self.father, problemClass._baseProblem), err_msg % 'father'
-        assert np.isfinite(self.u), err_msg % 'u'
-        assert np.isfinite(self.X).all(), err_msg % 'X'
+        assert self.index >= 0, err_msg % "index"
+        assert self.dimension in (2, 3), err_msg % "dimension"
+        assert isinstance(self.father, problemClass._baseProblem), err_msg % "father"
+        assert np.isfinite(self.u), err_msg % "u"
+        assert np.isfinite(self.X).all(), err_msg % "X"
         # assert np.isfinite(self.U).all(), err_msg % 'U'
         # assert np.isfinite(self.W).all(), err_msg % 'W'
-        assert np.isfinite(self.attract), err_msg % 'attract'
-        assert np.isfinite(self.align), err_msg % 'align'
-        assert np.isfinite(self.dipole), err_msg % 'dipole'
+        assert np.isfinite(self.attract), err_msg % "attract"
+        assert np.isfinite(self.align), err_msg % "align"
+        assert np.isfinite(self.dipole), err_msg % "dipole"
         for obji in self.neighbor_list:
-            assert isinstance(obji, _baseParticle), err_msg % 'neighbor_list'
+            assert isinstance(obji, _baseParticle), err_msg % "neighbor_list"
         return True
 
     def update_finish(self):
@@ -254,7 +254,7 @@ class _baseParticle(baseClass.baseObj):
 
 
 class particle2D(_baseParticle):
-    def __init__(self, name = '...', **kwargs):
+    def __init__(self, name="...", **kwargs):
         super().__init__(name, **kwargs)
         # self._type = 'particle2D'
         self._dimension = 2  # 2 for 2D
@@ -265,9 +265,13 @@ class particle2D(_baseParticle):
         self._phi_hist = []  # major norm P1, for 2D version
 
         self._X = np.array((0, 0))  # particle center coordinate
-        self._U = np.nan * np.array((0, 0))  # particle translational velocity in global coordinate
-        self._W = np.nan * np.array((0,))  # particle rotational velocity in global coordinate
-        self._neighbor_list = uniqueList(acceptType = type(self))
+        self._U = np.nan * np.array(
+            (0, 0)
+        )  # particle translational velocity in global coordinate
+        self._W = np.nan * np.array(
+            (0,)
+        )  # particle rotational velocity in global coordinate
+        self._neighbor_list = uniqueList(acceptType=type(self))
         self.update_phi()
 
     @_baseParticle.father.setter
@@ -281,7 +285,7 @@ class particle2D(_baseParticle):
 
     @viewRange.setter
     def viewRange(self, viewRange):
-        err_msg = 'viewRange is a scale. '
+        err_msg = "viewRange is a scale. "
         assert viewRange.size == 1, err_msg
         assert -np.pi <= viewRange <= np.pi
         self._viewRange = viewRange
@@ -308,7 +312,7 @@ class particle2D(_baseParticle):
     @phi.setter
     def phi(self, phi):
         # phi = np.hstack((phi,))
-        err_msg = 'phi is a scale. '
+        err_msg = "phi is a scale. "
         assert phi.size == 1, err_msg
         assert -np.pi <= phi <= np.pi, phi
         self._phi = phi
@@ -316,7 +320,7 @@ class particle2D(_baseParticle):
 
     @_baseParticle.W.setter
     def W(self, W):
-        err_msg = 'W is a scale. '
+        err_msg = "W is a scale. "
         assert W.size == 1, err_msg
         _baseParticle.W.fset(self, W)
 
@@ -352,28 +356,28 @@ class particle2D(_baseParticle):
     def hdf5_pick(self, handle, **kwargs):
         hdf5_kwargs = self.father.hdf5_kwargs
         obji_hist = super().hdf5_pick(handle, **kwargs)
-        obji_hist.create_dataset('phi_hist', data = self.phi_hist, **hdf5_kwargs)
+        obji_hist.create_dataset("phi_hist", data=self.phi_hist, **hdf5_kwargs)
         return obji_hist
 
     def hdf5_load(self, handle, **kwargs):
         obji_hist = super().hdf5_load(handle, **kwargs)
-        self._phi_hist = obji_hist['phi_hist'][:]
+        self._phi_hist = obji_hist["phi_hist"][:]
         return obji_hist
 
     def check_self(self, **kwargs):
         super().check_self()
-        err_msg = 'wrong parameter value: %s '
-        assert self.dimension in (2,), err_msg % 'dimension'
-        assert isinstance(self.father, problemClass._base2DProblem), err_msg % 'father'
-        assert self.X.shape == (2,), err_msg % 'X'
-        assert self.U.shape == (2,), err_msg % 'U'
-        assert self.W.size == 1, err_msg % 'W'
+        err_msg = "wrong parameter value: %s "
+        assert self.dimension in (2,), err_msg % "dimension"
+        assert isinstance(self.father, problemClass._base2DProblem), err_msg % "father"
+        assert self.X.shape == (2,), err_msg % "X"
+        assert self.U.shape == (2,), err_msg % "U"
+        assert self.W.size == 1, err_msg % "W"
         for obji in self.neighbor_list:
-            assert isinstance(obji, particle2D), err_msg % 'neighbor_list'
-        assert np.isfinite(self.P1).all(), err_msg % 'P1'
-        assert self.P1.shape == (2,), err_msg % 'P1'
-        assert isinstance(self.phi, np.float64), err_msg % 'phi'
-        assert np.isfinite(self.phi), err_msg % 'phi'
+            assert isinstance(obji, particle2D), err_msg % "neighbor_list"
+        assert np.isfinite(self.P1).all(), err_msg % "P1"
+        assert self.P1.shape == (2,), err_msg % "P1"
+        assert isinstance(self.phi, np.float64), err_msg % "phi"
+        assert np.isfinite(self.phi), err_msg % "phi"
         return True
 
     def update_finish(self):
@@ -387,26 +391,32 @@ class particle2D(_baseParticle):
 class ackermann2D(particle2D):
     # todo: Add command, annotate references, and define all variables wu
     # reference:May 2017 preprint of Modern Robotics, Lynch and Park, Cambridge U. Press, 2017 http://modernrobotics.org
-    '''
+    """
     l_steer: wheelbase between the front and rear wheels
     phi_steer: steering angle
-    '''
+    """
 
     # ref, and variable's definition.
     # deninition of l_steer, phi_steer
-    def __init__(self, l_steer, phi_steer = 0, name = '...', **kwargs):
+    def __init__(self, l_steer, name="...", **kwargs):
         super().__init__(name, **kwargs)
         self._l_steer = l_steer
-        self._phi_steer = phi_steer
+        self._phi_steer = 0
+        self._w_steer = 0  # steer self-spin speed
+        self._W_steer = 0  # steer rotational velocity in global coordinate
 
         # historical information
-        # self._l_steer_hist = []  # todo: hist of ..... wu
         self._phi_steer_hist = []  # todo:... wu
+        self._W_steer_hist = []  # todo:... wu
 
     # todo: add all property wu
     @property
     def phi_steer_hist(self):
         return self._phi_steer_hist
+
+    @property
+    def W_steer_hist(self):
+        return self._W_steer_hist
 
     @property
     def l_steer(self):
@@ -416,9 +426,9 @@ class ackermann2D(particle2D):
     def l_steer(self, l_steer):
         # todo: some check wu
         l_steer = np.array(l_steer)
-        err_msg = 'wrong parameter value: %s '
-        assert self.l_steer.size == 1, err_msg % 'l_steer'
-        err_msg = 'wheelbase must > 0 . '
+        err_msg = "wrong parameter value: %s "
+        assert self.l_steer.size == 1, err_msg % "l_steer"
+        err_msg = "wheelbase must > 0 . "
         assert l_steer > 0, err_msg
         self._l_steer = l_steer
 
@@ -435,6 +445,22 @@ class ackermann2D(particle2D):
         # assert phi_steer < np.pi, err_msg
         self._phi_steer = phi_steer
 
+    @property
+    def w_steer(self):
+        return self._w_steer
+
+    @w_steer.setter
+    def w_steer(self, w_steer):
+        self._w_steer = w_steer
+
+    # ....
+    @property
+    def W_steer(self):
+        return self._W_steer
+
+    @W_steer.setter
+    def W_steer(self, W_steer):
+        self._W_steer = W_steer
 
     def update_position(self, X, phi, phi_steer, **kwargs):
         self.X = X
@@ -442,9 +468,29 @@ class ackermann2D(particle2D):
         self.phi_steer = warpToPi(phi_steer)
         return True
 
+    def update_velocity(self, U, W, W_steer, **kwargs):
+        self.U = U
+        self.W = W
+        self.W_steer = W_steer
+        return True
+
+    def do_store_data(self, **kwargs):
+        super().do_store_data()
+        if self.rank0:
+            self.phi_steer_hist.append(
+                self.phi_steer
+            )  # phi_steer is a float, no necessary to copy.
+        return True
+
+    def update_finish(self):
+        super().update_finish()
+        if self.rank0:
+            self._phi_steer_hist = np.hstack(self.phi_steer_hist)
+        return True
+
 
 class finiteDipole2D(particle2D):
-    def __init__(self, length, name = '...', **kwargs):
+    def __init__(self, length, name="...", **kwargs):
         super().__init__(name, **kwargs)
         self._Z = np.nan
         self._Zl = np.nan
@@ -459,7 +505,7 @@ class finiteDipole2D(particle2D):
 
     @length.setter
     def length(self, length):
-        err_msg = 'length is a scale. '
+        err_msg = "length is a scale. "
         assert length.size == 1, err_msg
         self._length = length
         self.update_Z()
@@ -515,7 +561,9 @@ class finiteDipole2D(particle2D):
         tau = self.dipole
         Zl = self.Zl  # left vortex
         Zr = self.Zr  # right vortex
-        wo = 1j * tau / (2 * np.pi) * (1 / (Z - Zr) - 1 / (Z - Zl))  # W = u - i * v: complex velocity
+        wo = (
+            1j * tau / (2 * np.pi) * (1 / (Z - Zr) - 1 / (Z - Zl))
+        )  # W = u - i * v: complex velocity
         return wo
 
     def UselfPropelled2D(self):
@@ -524,8 +572,8 @@ class finiteDipole2D(particle2D):
 
     def check_self(self, **kwargs):
         super().check_self()
-        err_msg = 'wrong parameter value: %s '
-        assert np.isfinite(self.length), err_msg % 'length'
+        err_msg = "wrong parameter value: %s "
+        assert np.isfinite(self.length), err_msg % "length"
 
 
 class limFiniteDipole2D(finiteDipole2D):
@@ -539,13 +587,13 @@ class limFiniteDipole2D(finiteDipole2D):
         l = self.length
         phi = self.phi
         dZ = Zn - self.Z
-        t1 = ((tau * l) / (2 * np.pi)) * (np.exp(1j * phi) / dZ ** 2)
+        t1 = ((tau * l) / (2 * np.pi)) * (np.exp(1j * phi) / dZ**2)
         # Ui = np.dstack((np.real(t1), -np.imag(t1)))
         # print(Ui.shape)
         # print(self, Zn, self.Z, np.real(t1), -np.imag(t1))
         return np.real(t1), -np.imag(t1)
 
-    def UDipole2Dof(self, obji: 'finiteDipole2D'):
+    def UDipole2Dof(self, obji: "finiteDipole2D"):
         # print(self, obji, obji.Z)
         # print(self, self, self.Z)
         return np.array(self.UDipole2Dat(obji.Z))
@@ -555,10 +603,10 @@ class limFiniteDipole2D(finiteDipole2D):
         l = self.length
         phi = self.phi
         dZ = Zn - self.Z
-        Wi = np.real(1j * np.exp(1j * (2 * phin + phi)) / dZ ** 3 * (tau * l / np.pi))
+        Wi = np.real(1j * np.exp(1j * (2 * phin + phi)) / dZ**3 * (tau * l / np.pi))
         return Wi
 
-    def WDipole2Dof(self, obji: 'finiteDipole2D'):
+    def WDipole2Dof(self, obji: "finiteDipole2D"):
         return self.WDipole2Dat(obji.Z, obji.phi)
 
     def UWDipole2Dat(self, Zn, phin):
@@ -566,10 +614,10 @@ class limFiniteDipole2D(finiteDipole2D):
         l = self.length
         phi = self.phi
         dZ = Zn - self.Z
-        t1 = ((tau * l) / (2 * np.pi)) * (np.exp(1j * phi) / dZ ** 2)
-        Wi = np.real(1j * np.exp(1j * (2 * phin + phi)) / dZ ** 3 * (tau * l / np.pi))
+        t1 = ((tau * l) / (2 * np.pi)) * (np.exp(1j * phi) / dZ**2)
+        Wi = np.real(1j * np.exp(1j * (2 * phin + phi)) / dZ**3 * (tau * l / np.pi))
         return np.real(t1), -np.imag(t1), Wi
 
-    def UWDipole2Dof(self, obji: 'finiteDipole2D'):
+    def UWDipole2Dof(self, obji: "finiteDipole2D"):
         u1, u2, w = self.UWDipole2Dat(obji.Z, obji.phi)
         return np.array((u1, u2)), w
