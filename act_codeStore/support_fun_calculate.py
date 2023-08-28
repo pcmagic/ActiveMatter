@@ -227,10 +227,6 @@ class do_behaviorParticle2D(_base_do2D):
     def addInteraction(self):
         act1 = interactionClass.selfPropelled2D(name="selfPropelled2D")
         self.problem.add_act(act1)
-        # act3 = interactionClass.Attract2D(name='Attract2D')
-        # self.problem.add_act(act3)
-        # act4 = interactionClass.Align2D(name='Align2D')
-        # self.problem.add_act(act4)
         act6 = interactionClass.AlignAttract2D(name="AlignAttract2D")
         self.problem.add_act(act6)
         return True
@@ -641,7 +637,7 @@ class do_dbg_action(_base_do2D):
 class do_ackermann(do_behaviorParticle2D):
     def ini_kwargs(self):
         super().ini_kwargs()
-        self._kwargs_necessary = self._kwargs_necessary + ["l_steer", "w_steer"]
+        self._kwargs_necessary = self._kwargs_necessary + ["l_steer", "w_steer", "radian_tolerance"]
         err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
         assert self.kwargs["update_fun"] == "1fe", err_msg
         err_msg = "wrong parameter update_order, only (0, 0) is acceptable. "
@@ -670,7 +666,7 @@ class do_ackermann(do_behaviorParticle2D):
         return True
     
     def addInteraction(self):
-        act1 = interactionClass.Ackermann2D(name="Ackermann2D")
+        act1 = interactionClass.Ackermann2D(name="Ackermann2D", radian_tolerance=self.kwargs["radian_tolerance"])
         self.problem.add_act(act1)
         return True
     
@@ -681,7 +677,6 @@ class do_ackermann(do_behaviorParticle2D):
         for tun, l_steer, w_steer in zip(self.un, self.l_steer_list, self.w_steer_list):
             tptc = self.ptcHandle(l_steer=l_steer, name="ackermann2D")
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
-            # tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
             tptc.X = np.random.uniform(-self.Xlim / 2, self.Xlim / 2, (2,))
             tptc.u = tun
             tptc.w = 0
@@ -690,4 +685,28 @@ class do_ackermann(do_behaviorParticle2D):
         spf.petscInfo(self.problem.logger, "  All the particles have a unified %s=%f, " % ("spin", 0), )
         spf.petscInfo(self.problem.logger, "  Generate %d particles with random seed %s" % (self.un.size, self.seed), )
         spf.petscInfo(self.problem.logger, "  Generate method: random_sample. ")
+        return True
+
+
+class do_ackermann_alignattract(do_ackermann):
+    def ini_kwargs(self):
+        super().ini_kwargs()
+        self._kwargs_necessary.remove("radian_tolerance")
+        return True
+    
+    def addInteraction(self):
+        act1 = interactionClass.Ackermann_AlignAttract2D(name="Ackermann_AlignAttract2D")
+        self.problem.add_act(act1)
+        return True
+
+
+class do_ackermann_phaseLag2D(do_phaseLag2D, do_ackermann):
+    def ini_kwargs(self):
+        super().ini_kwargs()
+        self._kwargs_necessary.remove("radian_tolerance")
+        return True
+    
+    def addInteraction(self):
+        act1 = interactionClass.Ackermann_phaseLag2D(name="Ackermann_phaseLag2D")
+        self.problem.add_act(act1)
         return True

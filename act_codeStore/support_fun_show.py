@@ -56,7 +56,7 @@ params = {
     'animation.embed_limit': 2 ** 128,
     'font.family':           'sans-serif',
     'font.size':             15,
-}
+    }
 preamble = r' '
 preamble = preamble + '\\usepackage{bm} '
 preamble = preamble + '\\usepackage{amsmath} '
@@ -72,60 +72,60 @@ plt.rcParams.update(params)
 def plt_all_colormap(figsize=None, dpi=100):
     # Indices to step through colormap.
     x = np.linspace(0.0, 1.0, 100)
-
+    
     gradient = np.linspace(0, 1, 256)
     gradient = np.vstack((gradient, gradient))
-
+    
     def plot_color_gradients(cmap_category, cmap_list):
         fig, axs = plt.subplots(figsize=figsize, dpi=dpi, nrows=len(cmap_list), ncols=2)
         fig.subplots_adjust(top=0.95, bottom=0.01, left=0.2, right=0.99,
                             wspace=0.05)
         fig.suptitle(cmap_category + ' colormaps', fontsize=14, y=1.0, x=0.6)
-
+        
         for ax, name in zip(axs, cmap_list):
             # Get RGB values for colormap.
             rgb = plt.get_cmap(name)(x)[np.newaxis, :, :3]
-
+            
             # Get colormap in CAM02-UCS colorspace. We want the lightness.
             lab = cspace_converter("sRGB1", "CAM02-UCS")(rgb)
             L = lab[0, :, 0]
             L = np.float64(np.vstack((L, L, L)))
-
+            
             ax[0].imshow(gradient, aspect='auto', cmap=plt.get_cmap(name))
             ax[1].imshow(L, aspect='auto', cmap='binary_r', vmin=0., vmax=100.)
             pos = list(ax[0].get_position().bounds)
             x_text = pos[0] - 0.01
             y_text = pos[1] + pos[3] / 2.
             fig.text(x_text, y_text, name, va='center', ha='right', fontsize=10)
-
+        
         # Turn off *all* ticks & spines, not just the ones with colormaps.
         for ax in axs.flat:
             ax.set_axis_off()
-
+    
     plot_color_gradients('Perceptually Uniform Sequential',
                          ['viridis', 'plasma', 'inferno', 'magma', 'cividis'])
-
+    
     plot_color_gradients('Sequential',
                          ['Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
                           'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
                           'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn'])
-
+    
     plot_color_gradients('Sequential (2)',
                          ['binary', 'gist_yarg', 'gist_gray', 'gray', 'bone',
                           'pink', 'spring', 'summer', 'autumn', 'winter', 'cool',
                           'Wistia', 'hot', 'afmhot', 'gist_heat', 'copper'])
-
+    
     plot_color_gradients('Diverging',
                          ['PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu',
                           'RdYlGn', 'Spectral', 'coolwarm', 'bwr', 'seismic'])
-
+    
     plot_color_gradients('Cyclic', ['twilight', 'twilight_shifted', 'hsv'])
-
+    
     plot_color_gradients('Qualitative',
                          ['Pastel1', 'Pastel2', 'Paired', 'Accent', 'Dark2',
                           'Set1', 'Set2', 'Set3', 'tab10', 'tab20', 'tab20b',
                           'tab20c'])
-
+    
     plot_color_gradients('Miscellaneous',
                          ['flag', 'prism', 'ocean', 'gist_earth', 'terrain',
                           'gist_stern', 'gnuplot', 'gnuplot2', 'CMRmap',
@@ -138,7 +138,7 @@ def set_axes_equal(ax, rad_fct=0.5):
     figsize = ax.figure.get_size_inches()
     l1, l2 = ax.get_position().bounds[2:] * figsize
     lmax = np.max((l1, l2))
-
+    
     if ax.name == "3d":
         '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
         cubes as cubes, etc..  This is one possible solution to Matplotlib's
@@ -147,13 +147,13 @@ def set_axes_equal(ax, rad_fct=0.5):
         Input
           ax: a matplotlib axis, e.g., as output from plt.gca().
         '''
-
+        
         limits = np.array([
             ax.get_xlim3d(),
             ax.get_ylim3d(),
             ax.get_zlim3d(),
-        ])
-
+            ])
+        
         origin = np.mean(limits, axis=1)
         radius = rad_fct * np.max(np.abs(limits[:, 1] - limits[:, 0]))
         radius_x = l1 / lmax * radius
@@ -166,7 +166,7 @@ def set_axes_equal(ax, rad_fct=0.5):
         limits = np.array([
             ax.get_xlim(),
             ax.get_ylim(),
-        ])
+            ])
         origin = np.mean(limits, axis=1)
         radius = rad_fct * np.max(np.abs(limits[:, 1] - limits[:, 0]))
         radius_x = l1 / lmax * radius
@@ -199,10 +199,10 @@ def make_segments(x, y):
     Create list of line segments from x and y coordinates, in the correct format for LineCollection:
     an array of the form   numlines x (points per line) x 2 (x and y) array
     '''
-
+    
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
-
+    
     return segments
 
 
@@ -214,7 +214,7 @@ def colorline(x, y, z=None, cmap=plt.get_cmap('copper'), ax=None, norm=plt.Norma
     Optionally specify colors in the array z
     Optionally specify a colormap, a norm function and a line width
     '''
-
+    
     # Default colors equally spaced on [0,1]:
     if z is None:
         z = np.linspace(0.0, 1.0, x.size)
@@ -222,14 +222,14 @@ def colorline(x, y, z=None, cmap=plt.get_cmap('copper'), ax=None, norm=plt.Norma
     if not hasattr(z, "__iter__"):  # to check for numerical input -- this is a hack
         z = np.array([z])
     z = np.asarray(z)
-
+    
     if ax is None:
         fig, ax = plt.subplots(nrows=1, ncols=1)
         fig.patch.set_facecolor('white')
     else:
         plt.sca(ax)
         # fig = plt.gcf()
-
+    
     segments = make_segments(x, y)
     lc = LineCollection(segments, array=z, cmap=cmap, norm=norm, linewidth=linewidth, alpha=alpha)
     ax.add_collection(lc)
@@ -295,7 +295,7 @@ def colorline3d(tnodes, tcl, quiver_length_fct=None, clb_title=' ', show_project
     # for spine in ax0.spines.values():
     #     spine.set_visible(False)
     # plt.tight_layout()
-
+    
     t1 = fig if return_fig else True
     return t1
 
@@ -320,7 +320,7 @@ def multicolor_ylabel(ax, list_of_strings, list_of_colors, axis='x', anchorpad=0
     list_of_strings is a list of all of the text items
     list_if_colors is a corresponding list of colors for the strings
     axis='x', 'y', or 'both' and specifies which label(s) should be drawn"""
-
+    
     # x-axis label
     if axis == 'x' or axis == 'both':
         boxes = [TextArea(text, textprops=dict(color=color, ha='left', va='bottom', **kw))
@@ -330,7 +330,7 @@ def multicolor_ylabel(ax, list_of_strings, list_of_colors, axis='x', anchorpad=0
                                           frameon=False, bbox_to_anchor=(0.2, -0.09),
                                           bbox_transform=ax.transAxes, borderpad=0.)
         ax.add_artist(anchored_xbox)
-
+    
     # y-axis label
     if axis == 'y' or axis == 'both':
         boxes = [TextArea(text, textprops=dict(color=color, ha='left', va='bottom',
@@ -348,7 +348,7 @@ class MinorSymLogLocator(Locator):
     Dynamically find minor tick positions based on the positions of
     major ticks for a symlog scaling.
     """
-
+    
     def __init__(self, linthresh):
         """
         Ticks will be placed between the major ticks.
@@ -356,7 +356,7 @@ class MinorSymLogLocator(Locator):
         otherwise its logarithmically
         """
         self.linthresh = linthresh
-
+    
     def __call__(self):
         'Return the locations of the ticks'
         majorlocs = self.axis.get_majorticklocs()
@@ -366,7 +366,7 @@ class MinorSymLogLocator(Locator):
         assert np.all(majorlocs >= 0)
         if np.isclose(majorlocs[0], 0):
             majorlocs = majorlocs[1:]
-
+        
         # # iterate through minor locs, handle the lowest part, old version
         # minorlocs = []
         # for i in range(1, len(majorlocs)):
@@ -378,7 +378,7 @@ class MinorSymLogLocator(Locator):
         #     minorstep = majorstep / ndivs
         #     locs = np.arange(majorlocs[i - 1], majorlocs[i], minorstep)[1:]
         #     minorlocs.extend(locs)
-
+        
         # iterate through minor locs, handle the lowest part, my version
         minorlocs = []
         for i in range(1, len(majorlocs)):
@@ -389,7 +389,7 @@ class MinorSymLogLocator(Locator):
                 tloc = tloc + tstp
                 minorlocs.append(tloc)
         return self.raise_if_exceeds(np.array(minorlocs))
-
+    
     def tick_values(self, vmin, vmax):
         raise NotImplementedError('Cannot get tick locations for a '
                                   '%s type.' % type(self))
@@ -402,13 +402,13 @@ class midPowerNorm(Normalize):
         assert gamma > 1
         self.gamma = gamma
         self.midpoint = midpoint
-
+    
     def __call__(self, value, clip=None):
         if clip is None:
             clip = self.clip
-
+        
         result, is_scalar = self.process_value(value)
-
+        
         self.autoscale_None(result)
         gamma = self.gamma
         midpoint = self.midpoint
@@ -511,13 +511,13 @@ class midLinearNorm(Normalize):
         # assert 1 == 2
         Normalize.__init__(self, vmin, vmax, clip)
         self.midpoint = midpoint
-
+    
     def __call__(self, value, clip=None):
         if clip is None:
             clip = self.clip
         result, is_scalar = self.process_value(value)
         # print(type(result))
-
+        
         self.autoscale_None(result)
         midpoint = self.midpoint
         vmin, vmax = self.vmin, self.vmax
@@ -583,7 +583,7 @@ class TwoSlopeNorm(Normalize):
             >>> offset(data)
             array([0., 0.25, 0.5, 0.625, 0.75, 0.875, 1.0])
         """
-
+        
         self.vcenter = vcenter
         self.vmin = vmin
         self.vmax = vmax
@@ -593,7 +593,7 @@ class TwoSlopeNorm(Normalize):
         if vcenter is not None and vmin is not None and vcenter <= vmin:
             raise ValueError('vmin, vcenter, and vmax must be in '
                              'ascending order')
-
+    
     def autoscale_None(self, A):
         """
         Get vmin and vmax, and then clip at vcenter
@@ -603,19 +603,19 @@ class TwoSlopeNorm(Normalize):
             self.vmin = self.vcenter
         if self.vmax < self.vcenter:
             self.vmax = self.vcenter
-
+    
     def __call__(self, value, clip=None):
         """
         Map value to the interval [0, 1]. The clip argument is unused.
         """
         result, is_scalar = self.process_value(value)
         self.autoscale_None(result)  # sets self.vmin, self.vmax if None
-
+        
         if not self.vmin <= self.vcenter <= self.vmax:
             raise ValueError("vmin, vcenter, vmax must increase monotonically")
         result = np.ma.masked_array(
-            np.interp(result, [self.vmin, self.vcenter, self.vmax],
-                      [0, 0.5, 1.]), mask=np.ma.getmask(result))
+                np.interp(result, [self.vmin, self.vcenter, self.vmax],
+                          [0, 0.5, 1.]), mask=np.ma.getmask(result))
         if is_scalar:
             result = np.atleast_1d(result)[0]
         return result
@@ -627,7 +627,7 @@ def RBGColormap(color: np.asarray, ifcheck=True):
             color = np.hstack((color, 1))
         err_mg = 'color is an array contain (R, B, G) or (R, B, G, A) information. '
         assert color.size == 4, err_mg
-
+    
     N = 256
     vals = np.ones((N, 4)) * color
     vals[:, 3] = np.linspace(0.1 * color[3], 0.5 * color[3], N)
@@ -665,7 +665,7 @@ class Arrow3D(FancyArrowPatch):
         super().__init__((0, 0), (0, 0), *args, **kwargs)
         self._xyz = (x, y, z)
         self._dxdydz = (dx, dy, dz)
-
+    
     def draw(self, renderer):
         x1, y1, z1 = self._xyz
         dx, dy, dz = self._dxdydz
@@ -691,7 +691,7 @@ def resampling_data(t, X, resampling_fct=2, t_use=None, interp1d_kind='quadratic
         if resampling_fct is not None:
             war_msg = 'size of t_use is %d, resampling_fct is IGNORED' % t_use.size
             warnings.warn(war_msg)
-
+    
     intp_fun1d = interpolate.interp1d(t, X, kind=interp1d_kind, copy=False, axis=0,
                                       bounds_error=True)
     return intp_fun1d(t_use)
@@ -712,7 +712,7 @@ def get_continue_angle(tx, ty1, t_use=None, interp1d_kind='quadratic'):
         t_use = np.linspace(tx.min(), tx.max(), 2 * tx.size)
     if np.array(t_use).size == 1:
         t_use = np.linspace(tx.min(), tx.max(), t_use * tx.size)
-
+    
     ty = get_increase_angle(ty1)
     intp_fun1d = interpolate.interp1d(tx, ty, kind=interp1d_kind, copy=False, axis=0,
                                       bounds_error=True)
@@ -759,7 +759,7 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
         for linei, datai in zip(line_list, data_list):
             linei.set_data((datai[:num, 0], datai[:num, 1]))
         return line_list
-
+    
     tidx = (t >= tmin) * (t <= tmax)
     t_use = np.linspace(t.min(), t.max(), int(t.size * resampling_fct))
     data_list = np.array([resampling_data(t[tidx], obji.X_hist[tidx], resampling_fct=resampling_fct,
@@ -771,7 +771,7 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
     if plt_range is None:
         plt_range = np.max(data_max - data_min)
     print('plt_range is', plt_range)
-
+    
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     axi.set_xlabel('$x_1$')
@@ -790,7 +790,7 @@ def make2D_X_video(t, obj_list: list, figsize=(9, 9), dpi=100, stp=1, interval=5
     # axi.set_yticklabels(tticks)
     # plt.tight_layout()
     # plt.show()
-
+    
     t_rsp = np.linspace(t[tidx].min(), t[tidx].max(), int(t[tidx].size * resampling_fct))
     frames = t_rsp.size // stp
     tqdm_fun = tqdm_notebook(total=frames + 2)
@@ -819,14 +819,14 @@ def make2D_Xomega_video(problem: 'problemClass._base2DProblem',
         # clb = fig.colorbar(scat, cax=cax)
         # clb.ax.set_title('$\\varphi / \\pi$')
         return scat
-
+    
     t = problem.t_hist
     tidx = (t >= plt_tmin) * (t <= plt_tmax)
     tidx[0] = False
     obj_list = problem.obj_list
     marker = 'o'
     title_fmt = '$ | \\langle \\dot{\\varphi} \\rangle | $, idx=%08d, t=%10.4f'
-
+    
     ax_title = 1
     t_plot, avg_all = cal_avrPhaseVelocity(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax, tavr=tavr,
                                            resampling_fct=resampling_fct, interp1d_kind=interp1d_kind, )
@@ -852,7 +852,7 @@ def make2D_Xomega_video(problem: 'problemClass._base2DProblem',
     print('plt_range is', plt_range)
     # # dbg
     # print('dbg', data_list.shape, avg_all.shape)
-
+    
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     crt_idx = 0
@@ -870,11 +870,13 @@ def make2D_Xomega_video(problem: 'problemClass._base2DProblem',
                        marker=marker, cmap=cmap, norm=norm)
     clb = fig.colorbar(scat, cax=cax)
     # clb.ax.set_title('$ | \\langle \\dot{\\varphi} \\rangle | $', fontsize='small')
-    title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
-                                             'edgecolor': (0, 0, 0, 0),
-                                             'pad':       5},
+    title = axi.text(0.5, 1, ax_title, bbox={
+        'facecolor': (0, 0, 0, 0),
+        'edgecolor': (0, 0, 0, 0),
+        'pad':       5
+        },
                      transform=axi.transAxes, ha="center", va='bottom')
-
+    
     frames = t_plot.size // stp
     tqdm_fun = tqdm_notebook(total=frames + 2)
     anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
@@ -891,7 +893,7 @@ def make2D_Xphi_video(problem: 'problemClass._base2DProblem',
                       plt_range=None, ):
     assert resampling_fct is None
     print('dbg, resampling_fct of current method is prohibit. ')
-
+    
     def update_fun(num, scat, title, data_list, phi_list, t_plot, cax):
         num = num * stp
         tqdm_fun.update(1)
@@ -901,14 +903,14 @@ def make2D_Xphi_video(problem: 'problemClass._base2DProblem',
         # clb = fig.colorbar(scat, cax=cax)
         # clb.ax.set_title('$\\varphi / \\pi$')
         return scat
-
+    
     t = problem.t_hist
     tidx = (t >= plt_tmin) * (t <= plt_tmax)
     tidx[0] = False
     obj_list = problem.obj_list
     marker = 'o'
     title_fmt = '$\\varphi / \\pi$, idx=%08d, t=%10.4f'
-
+    
     # t_plot, W_avg, phi_list = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
     #                                      resampling_fct=1, interp1d_kind=interp1d_kind,
     #                                      tavr=0.001)
@@ -930,7 +932,7 @@ def make2D_Xphi_video(problem: 'problemClass._base2DProblem',
     print('plt_range is', plt_range)
     # # dbg
     # print('dbg', data_list.shape, avg_all.shape)
-
+    
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     crt_idx = 0
@@ -948,11 +950,13 @@ def make2D_Xphi_video(problem: 'problemClass._base2DProblem',
                        marker=marker, cmap=cmap, norm=norm)
     clb = fig.colorbar(scat, cax=cax)
     # clb.ax.set_title('$\\varphi / \\pi$', fontsize='small')
-    title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
-                                             'edgecolor': (0, 0, 0, 0),
-                                             'pad':       5},
+    title = axi.text(0.5, 1, ax_title, bbox={
+        'facecolor': (0, 0, 0, 0),
+        'edgecolor': (0, 0, 0, 0),
+        'pad':       5
+        },
                      transform=axi.transAxes, ha="center", va='bottom')
-
+    
     frames = t_plot.size // stp
     tqdm_fun = tqdm_notebook(total=frames + 2)
     anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
@@ -1036,7 +1040,7 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
                            plt_range=None, ):
     assert resampling_fct is None
     print('dbg, resampling_fct of current method is prohibit. ')
-
+    
     def update_fun(num, qr, title, phi_list, W_list, data_list, t_plot):
         num = num * stp
         tqdm_fun.update(1)
@@ -1044,7 +1048,7 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
         qr.set_UVC(np.cos(phi_list[:, num]), np.sin(phi_list[:, num]), W_list[:, num])
         title.set_text(title_fmt % (num, t_plot[num]))
         return True
-
+    
     t = problem.t_hist
     tidx = (t >= plt_tmin) * (t <= plt_tmax)
     tidx[0] = False
@@ -1057,7 +1061,7 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
     weights = np.ones(avg_stp) / avg_stp
     err_msg = 'tavr <= %f, current: %f' % (t_plot.max() - t_plot.min(), tavr)
     assert avg_stp <= t_plot.size, err_msg
-
+    
     phi_list = np.array([obji.phi_hist[tidx] for obji in obj_list])
     W_list = np.abs(np.array([np.convolve(weights, obji.W_hist[1:], mode='same') for obji in obj_list]))
     for i0 in np.arange(avg_stpD2):
@@ -1083,9 +1087,11 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
     if plt_range is None:
         plt_range = np.max(data_max - data_min)
         print('plt_range is', plt_range)
-
+    
     fig, (axi, cax) = plt.subplots(nrows=1, ncols=2, figsize=figsize, dpi=dpi, constrained_layout=True,
-                                   gridspec_kw={'width_ratios': [10, 1]})
+                                   gridspec_kw={
+                                       'width_ratios': [10, 1]
+                                       })
     fig.patch.set_facecolor('white')
     crt_idx = 0
     axi.set_xlabel('$x_1$')
@@ -1098,12 +1104,14 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
                     W_list[:, crt_idx], cmap=cmap, norm=norm)
     fig.colorbar(qr, cax=cax)
     ax_title = title_fmt % (crt_idx, t_plot[crt_idx])
-    title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
-                                             'edgecolor': (0, 0, 0, 0),
-                                             'pad':       5},
+    title = axi.text(0.5, 1, ax_title, bbox={
+        'facecolor': (0, 0, 0, 0),
+        'edgecolor': (0, 0, 0, 0),
+        'pad':       5
+        },
                      transform=axi.transAxes, ha="center", va='bottom')
     axi.axis('equal')
-
+    
     frames = t_plot.size // stp
     tqdm_fun = tqdm_notebook(total=frames + 2)
     anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
@@ -1141,7 +1149,7 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
     #     metadata = {'Creator': 'Zhang Ji'}
     # else:
     #     metadata = None
-
+    
     if rank == 0:
         backend = matplotlib.get_backend()
         matplotlib.use('Agg')
@@ -1150,7 +1158,7 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
         fig.savefig(fname=filename, dpi=dpi)
         plt.close(fig)
         matplotlib.use(backend)
-
+    
     logger = problem.logger
     spf.petscInfo(logger, ' ')
     spf.petscInfo(logger, 'save 2D trajectory to %s' % filename)
@@ -1179,16 +1187,16 @@ def _trajectory2D_fun_fun(obji: 'particleClass.particle2D', tidx, axi, cmap, t0_
     # color = np.ones((X_hist.shape[0], 4)) * tcolor
     # color[:, 3] = np.linspace(0, tcolor[3], X_hist.shape[0])
     # axi.plot(X_hist[:, 0], X_hist[:, 1], '-', color=color)
-
+    
     problem = obji.father
     t_hist = problem.t_hist[tidx]
     norm = plt.Normalize(0.0, 1.0)
     X_hist = obji.X_hist[tidx]
-
+    
     if resampling_fct is not None:
         X_hist = resampling_data(t_hist, X_hist, resampling_fct=resampling_fct, interp1d_kind=interp1d_kind)
     axi.scatter(X_hist[0, 0], X_hist[0, 1], color='k', marker=t0_marker)
-
+    
     lc = LineCollection(make_segments(X_hist[:, 0], X_hist[:, 1]),
                         array=np.linspace(0.0, 1.0, X_hist.shape[0]),
                         cmap=RBGColormap(cmap(obji.index / problem.n_obj), ifcheck=False),
@@ -1202,11 +1210,11 @@ def _segments_fun(obji: 'particleClass.particle2D', tidx, axi, cmap, t0_marker,
     problem = obji.father
     t_hist = problem.t_hist[tidx]
     X_hist = obji.X_hist[tidx]
-
+    
     if resampling_fct is not None:
         X_hist = resampling_data(t_hist, X_hist, resampling_fct=resampling_fct, interp1d_kind=interp1d_kind)
     axi.scatter(X_hist[0, 0], X_hist[0, 1], color='k', marker=t0_marker)
-
+    
     spr_idx = separate_idx(X_hist.T)
     for tidx0, tidx1 in spr_idx:
         axi.plot(X_hist[tidx0:tidx1, 0], X_hist[tidx0:tidx1, 1], c=cmap(obji.index / problem.n_obj),
@@ -1269,7 +1277,7 @@ def cal_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
     weights = np.ones(avg_stp) / avg_stp
     err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
     assert avg_stp <= t_use.size, err_msg
-
+    
     avg_all = []
     for obji in problem.obj_list:  # type:particleClass.particle2D
         W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
@@ -1296,7 +1304,7 @@ def cal_avrInfo_raw(problem: 'problemClass._base2DProblem',
     avg_stp = np.ceil(tavr / dt_res).astype('int')
     t_return = t_use
     weights = np.ones(avg_stp) / avg_stp
-
+    
     W_avg = []
     phi_avg = []
     for obji in problem.obj_list:  # type:particleClass.particle2D
@@ -1320,6 +1328,7 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
                 t_tmin=-np.inf, t_tmax=np.inf,
                 resampling_fct=1, interp1d_kind='quadratic',
                 tavr=1, npabs=True):
+    resampling_fct = 1 if resampling_fct is None else resampling_fct
     tidx = problem.t_hist < np.inf
     if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
         tidx[0] = False
@@ -1329,7 +1338,7 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
     weights = np.ones(avg_stp) / avg_stp
     err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
     assert avg_stp <= t_use.size, err_msg
-
+    
     W_avg = []
     phi_avg = []
     for obji in problem.obj_list:  # type:particleClass.particle2D
@@ -1346,7 +1355,7 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
         i1 = - i0 - 1
         W_avg[:, i1] = W_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
         phi_avg[:, i1] = phi_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
-
+    
     tidx = (t_use >= t_tmin) * (t_use <= t_tmax)
     t_use = t_use[tidx]
     W_avg = W_avg[:, tidx]
@@ -1358,9 +1367,9 @@ def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
                           figsize=np.array((50, 50)) * 5, dpi=100,
                           plt_tmin=-np.inf, plt_tmax=np.inf,
                           resampling_fct=1, interp1d_kind='quadratic',
-                          vmin=None, vmax=1, cmap=plt.get_cmap('bwr'), tavr=1, npabs=True,
+                          vmin='None', vmax=1, cmap=plt.get_cmap('bwr'), tavr=1, npabs=True,
                           sort_idx=None):
-    if vmin is None:
+    if vmin == 'None':
         vmin = 0 if npabs else -1
     align = problem.align
     t_plot, W_avg, _ = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
@@ -1368,7 +1377,7 @@ def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
                                    tavr=tavr, npabs=npabs)
     sort_idx = np.argsort(np.mean(W_avg[:, t_plot > t_plot.max() / 2], axis=-1)) \
         if sort_idx is None else sort_idx
-
+    
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     norm = Normalize(vmin=vmin, vmax=vmax)
@@ -1410,8 +1419,10 @@ def core_avrPhase(problem: 'problemClass._base2DProblem',
                   resampling_fct=1, interp1d_kind='quadratic',
                   cmap=plt.get_cmap('bwr'), tavr=1,
                   sort_type='normal', sort_idx=None):
-    sort_dict = {'normal':    lambda: np.argsort(np.mean(W_avg[:, t_plot > t_plot.max() / 2], axis=-1)),
-                 'traveling': lambda: np.argsort(phi_avg[:, -1])}
+    sort_dict = {
+        'normal':    lambda: np.argsort(np.mean(W_avg[:, t_plot > t_plot.max() / 2], axis=-1)),
+        'traveling': lambda: np.argsort(phi_avg[:, -1])
+        }
     t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
                                          resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
                                          tavr=tavr)
@@ -1419,13 +1430,13 @@ def core_avrPhase(problem: 'problemClass._base2DProblem',
         sort_idx = sort_dict[sort_type]() if sort_idx is None else sort_idx
     except:
         raise ValueError('wrong sort_type, current: %s, accept: %s' % (sort_type, sort_dict.keys()))
-
+    
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
-
+    
     vmin, vmax = -1, 1
     norm = Normalize(vmin=vmin, vmax=vmax)
-
+    
     obj_idx = np.arange(0, problem.n_obj + 1)
     # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
     c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx, :] / np.pi, cmap=cmap, norm=norm)
@@ -1458,7 +1469,7 @@ def cal_polar_order(problem: 'problemClass._base2DProblem',
     t_hist = problem.t_hist[tidx]
     if show_idx is None:
         show_idx = np.arange(problem.n_obj)
-
+    
     cplx_R = np.mean(np.array([(np.cos(tobj.phi_hist[tidx]), np.sin(tobj.phi_hist[tidx]))
                                for tobj in problem.obj_list[show_idx]]), axis=0).T
     # avg_all = np.vstack(avg_all)
@@ -1478,7 +1489,7 @@ def cal_polar_order_chimera(problem: 'problemClass._base2DProblem',
     weights = np.ones(avg_stp) / avg_stp
     err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
     assert avg_stp <= t_use.size, err_msg
-
+    
     W_avg = []
     phi_hst = []
     for obji in problem.obj_list:  # type:particleClass.particle2D
@@ -1515,7 +1526,7 @@ def core_polar_order(problem: 'problemClass._base2DProblem',
     t_hist, cplx_R = cal_polar_order(problem, t_tmin=plt_tmin, t_tmax=plt_tmax, show_idx=show_idx)
     odp_R = np.linalg.norm(cplx_R, axis=-1)
     xlim, ylim = (t_hist.min(), t_hist.max()), (0, 1.03)
-
+    
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     axi.plot(t_hist, odp_R, linestyle, markevery=markevery, )
@@ -1536,9 +1547,9 @@ def core_polar_order(problem: 'problemClass._base2DProblem',
 
 
 deta1_fun = lambda meat1, meta2, alpha, align: spf.warpToPi(
-    -align / 2 * (2 * np.sin(meat1) * np.cos(alpha) + np.sin(meta2 + alpha) + np.sin(meat1 - meta2 - alpha)))
+        -align / 2 * (2 * np.sin(meat1) * np.cos(alpha) + np.sin(meta2 + alpha) + np.sin(meat1 - meta2 - alpha)))
 deta2_fun = lambda meat1, meta2, alpha, align: spf.warpToPi(
-    -align / 2 * (2 * np.sin(meta2) * np.cos(alpha) + np.sin(meat1 + alpha) + np.sin(meta2 - meat1 - alpha)))
+        -align / 2 * (2 * np.sin(meta2) * np.cos(alpha) + np.sin(meat1 + alpha) + np.sin(meta2 - meat1 - alpha)))
 
 
 def fun_grdmp_bck(fig, axi, alpha, align, order=1, cmap=plt.get_cmap('gray_r'),
@@ -1548,7 +1559,7 @@ def fun_grdmp_bck(fig, axi, alpha, align, order=1, cmap=plt.get_cmap('gray_r'),
             etati = [spf.warpToPi(deta1_fun(etati[0], etati[1], alpha, align) + etati[0]),
                      spf.warpToPi(deta2_fun(etati[0], etati[1], alpha, align) + etati[1])]
         return etati
-
+    
     # plot background gradient map
     etat0 = np.meshgrid(np.linspace(-1, 1, 21) * np.pi, np.linspace(-1, 1, 21) * np.pi)
     eta_use = _fun_grdmp_nth(etat0, alpha, align, order)
@@ -1557,14 +1568,14 @@ def fun_grdmp_bck(fig, axi, alpha, align, order=1, cmap=plt.get_cmap('gray_r'),
     axi.set_xlabel('$\\eta_1 / \\pi$')
     axi.set_ylabel('$\\eta_2 / \\pi$')
     axi.set_title('$\\sigma = %f$' % align)
-
+    
     # # gradient field, normalized by sigma
     # norm = LogNorm(vmin=1e-2, vmax=1e0)
     # tnorm = np.sqrt(deta_use[0] ** 2 + deta_use[1] ** 2)
     # cqu = axi.quiver(etat0[0] / np.pi, etat0[1] / np.pi, deta_use[0] / tnorm, deta_use[1] / tnorm, tnorm / align,
     #                  norm=norm, cmap=cmap, angles='xy', pivot='mid', scale=40)
     # fig.colorbar(cqu).ax.set_title('$|\\delta\\eta^{t+%d}| / \\sigma$ \n' % order)
-
+    
     # gradient field, MOD pi
     norm = Normalize(vmin=0, vmax=1)
     tnorm = np.sqrt(deta_use[0] ** 2 + deta_use[1] ** 2)
@@ -1592,7 +1603,7 @@ def axi_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem', axi,
     sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
     if substract_mean0:
         avg_all = avg_all - np.mean(avg_all[sort_idx[0]])
-
+    
     norm = Normalize(vmin=vmin, vmax=vmax)
     obj_idx = np.arange(0, problem.n_obj + 1)
     c = axi.pcolorfast(t_plot, obj_idx, avg_all[sort_idx, :] / align, cmap=cmap, norm=norm)
@@ -1617,7 +1628,7 @@ def axi_rltPhaseVelocity(problem: 'problemClass.behavior2DProblem', axi,
                                      tavr=tavr, npabs=npabs)
     sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
     avg_all = avg_all - avg_all[sort_idx[0]]
-
+    
     norm = Normalize(vmin=vmin, vmax=vmax)
     obj_idx = np.arange(0, problem.n_obj)
     c = axi.pcolorfast(t_plot, obj_idx, avg_all[sort_idx[1:], :] / align, cmap=cmap, norm=norm)
@@ -1642,7 +1653,7 @@ def axi_avrPhase(problem: 'problemClass.behavior2DProblem', axi,
                                          tavr=tavr, npabs=npabs)
     sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
     phi_avg = phi_avg - np.mean(phi_avg[sort_idx[0]])
-
+    
     vmin, vmax = -1, 1
     norm = Normalize(vmin=vmin, vmax=vmax)
     obj_idx = np.arange(0, problem.n_obj + 1)
@@ -1668,7 +1679,7 @@ def axi_rltPhase(problem: 'problemClass.behavior2DProblem', axi,
                                          tavr=tavr, npabs=npabs)
     sort_idx = np.arange(0, 3) if sort_idx is None else sort_idx
     phi_avg = phi_avg - phi_avg[sort_idx[0]]
-
+    
     vmin, vmax = -1, 1
     norm = Normalize(vmin=vmin, vmax=vmax)
     obj_idx = np.arange(0, problem.n_obj)

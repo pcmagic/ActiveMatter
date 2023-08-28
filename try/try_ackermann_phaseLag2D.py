@@ -40,7 +40,8 @@ np.set_printoptions(linewidth=110, precision=5)
 params = {
     'animation.html': 'html5',
     'font.family':    'sans-serif',
-    'font.size':      15, }
+    'font.size':      15,
+    }
 preamble = r' '
 preamble = preamble + '\\usepackage{bm} '
 preamble = preamble + '\\usepackage{amsmath} '
@@ -58,7 +59,7 @@ from act_codeStore import support_fun_show as sps
 from collectiveFish.do_calculate import calculate_fun_dict, prbHandle_dict, rltHandle_dict, ptcHandle_dict
 
 update_fun, update_order, eval_dt = '1fe', (0, 0), 0.1
-nptc, max_t, calculate_fun = 1, eval_dt * 100, 'do_ackermann'
+nptc, max_t, calculate_fun = 3, eval_dt * 1e1, 'do_ackermann_phaseLag2D'
 l_steer, w_steer = 3, 0
 
 problem_kwargs = {
@@ -71,38 +72,31 @@ problem_kwargs = {
     'prbHandle':        prbHandle_dict[calculate_fun],
     'rltHandle':        rltHandle_dict[calculate_fun],
     'ptcHandle':        ptcHandle_dict[calculate_fun],
-    'fileHandle':       'try_ackermann',
+    'fileHandle':       'do_ackermann_phaseLag2D',
     'save_every':       np.int64(1),
     'nptc':             np.int64(nptc),
-    'overlap_epsilon':  np.float64(1e-100),
-    'un':               np.float64(0.02) / 0.024,
+    'overlap_epsilon':  np.float64(0),
+    'un':               np.float64(1),
     'ln':               np.float64(-1),
     'Xlim':             np.float64(6),
     'attract':          np.float64(0.41),
     'align':            np.float64(2.7),
     'l_steer':          np.float64(l_steer),
     'w_steer':          np.float64(w_steer),
-    'radian_tolerance': 0.12,
+    'radian_tolerance': 0.,
     'viewRange':        np.float64(1),
+    'localRange':       np.float64(1e10),
+    'phaseLag2D':       np.float64(0),
     'seed':             1,
-    'tqdm_fun':         tqdm_notebook, }
+    'tqdm_fun':         tqdm_notebook,
+    }
 
 doPrb1 = problem_kwargs['calculate_fun'](**problem_kwargs)
 prb1 = doPrb1.ini_calculate()
-obji = prb1.obj_list[0]
-obji.X = np.array((10, 10))
-obji.phi = np.float64(0)
-obji.phi_steer = np.float64(0)
-obji.goal = np.array((10, 20, 3.1415926))
-obji.goal_threshold = 0.2
-obji.v_max = np.float64(5)
-obji.w_max = np.float64(2)
-obji.phi_steer_limit = np.pi / 4
 prb1.update_self(t0=problem_kwargs['ini_t'], t1=problem_kwargs['max_t'], eval_dt=eval_dt, )
 
-print(np.vstack((np.linalg.norm(obji.U_hist, axis=1), obji.W_steer_hist)).T[1:].shape)
-print(np.vstack((obji.X_hist.T, obji.phi_hist, obji.phi_steer_hist)).T[1:].shape)
-
+# print(np.vstack((np.linalg.norm(obji.U_hist, axis=1), obji.W_steer_hist)).T[1:])
+# print(np.vstack((obji.X_hist.T, obji.phi_hist, obji.phi_steer_hist)).T[1:])
 
 # ################################################################################3
 #

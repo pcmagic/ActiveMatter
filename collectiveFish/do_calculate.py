@@ -47,7 +47,10 @@ calculate_fun_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": spc.do_phaseLagWiener2D_AR,
     "do_phaseLag2D_Wiener":           spc.do_phaseLag2D_Wiener,
     "do_dbg_action":                  spc.do_dbg_action,
-    "do_ackermann":                   spc.do_ackermann, }
+    "do_ackermann":                   spc.do_ackermann,
+    "do_ackermann_alignAttract":      spc.do_ackermann_alignattract,
+    "do_ackermann_phaseLag2D":        spc.do_ackermann_phaseLag2D,
+    }
 
 prbHandle_dict = {
     "do_FiniteDipole2D":              problemClass.finiteDipole2DProblem,
@@ -69,7 +72,10 @@ prbHandle_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": problemClass.behavior2DProblem,
     "do_phaseLag2D_Wiener":           problemClass.behavior2DProblem,
     "do_dbg_action":                  problemClass.finiteDipole2DProblem,
-    "do_ackermann":                   problemClass.Ackermann2DProblem, }
+    "do_ackermann":                   problemClass.Ackermann2DProblem,
+    "do_ackermann_alignAttract":      problemClass.Ackermann2DProblem,
+    "do_ackermann_phaseLag2D":        problemClass.Ackermann2DProblem,
+    }
 
 rltHandle_dict = {
     "do_FiniteDipole2D":              relationClass.finiteRelation2D,
@@ -91,7 +97,10 @@ rltHandle_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": relationClass.VoronoiBaseRelation2D,
     "do_phaseLag2D_Wiener":           relationClass.localBaseRelation2D,
     "do_dbg_action":                  relationClass.finiteRelation2D,
-    "do_ackermann":                   relationClass.AllBaseRelation2D, }
+    "do_ackermann":                   relationClass.AllBaseRelation2D,
+    "do_ackermann_alignAttract":      relationClass.AllBaseRelation2D,
+    "do_ackermann_phaseLag2D":        relationClass.AllBaseRelation2D,
+    }
 
 ptcHandle_dict = {
     "do_FiniteDipole2D":              particleClass.finiteDipole2D,
@@ -113,7 +122,10 @@ ptcHandle_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": particleClass.particle2D,
     "do_phaseLag2D_Wiener":           particleClass.particle2D,
     "do_dbg_action":                  particleClass.finiteDipole2D,
-    "do_ackermann":                   particleClass.ackermann2D, }
+    "do_ackermann":                   particleClass.ackermann2D,
+    "do_ackermann_alignAttract":      particleClass.ackermann2D,
+    "do_ackermann_phaseLag2D":        particleClass.ackermann2D,
+    }
 
 
 # get kwargs
@@ -160,6 +172,7 @@ def get_problem_kwargs(**main_kwargs):
     # ackermann parameters
     l_steer = np.float64(OptDB.getReal("l_steer", 1))
     w_steer = np.float64(OptDB.getReal("w_steer", 1))
+    radian_tolerance = np.float64(OptDB.getReal("radian_tolerance", 0))
     
     err_msg = "wrong parameter eval_dt, eval_dt>0. "
     assert eval_dt > 0, err_msg
@@ -200,9 +213,11 @@ def get_problem_kwargs(**main_kwargs):
         "trs_noise":        trs_noise,
         "l_steer":          l_steer,
         "w_steer":          w_steer,
+        'radian_tolerance': radian_tolerance,
         "phaseLag_rdm_fct": phaseLag_rdm_fct,
         "seed":             seed,
-        "tqdm_fun":         tqdm, }
+        "tqdm_fun":         tqdm,
+        }
     
     kwargs_list = (main_kwargs,)
     for t_kwargs in kwargs_list:

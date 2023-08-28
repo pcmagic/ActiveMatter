@@ -492,7 +492,9 @@ class phaseLag2D(_baseAction2D):
     def update_each_action(self, obji: "particleClass.particle2D", **kwargs):
         phaseLag = self.phaseLag
         Ui = np.zeros(2)
-        Wi = (obji.align * np.mean([np.sin(objj.phi - obji.phi - phaseLag) for objj in obji.neighbor_list]) if obji.neighbor_list else 0)
+        Wi = (obji.align * np.mean([np.sin(objj.phi - obji.phi - phaseLag)
+                                    for objj in obji.neighbor_list])
+              if obji.neighbor_list else 0)
         return Ui, Wi
     
     def print_info(self):
@@ -694,9 +696,22 @@ class AttractRepulsion2D_point(_baseAction2D):
         spf.petscInfo(self.father.logger, "  k1=%e, k2=%e, k3=%e, k4=%e" % (self.k1, self.k2, self.k3, self.k4), )
         return True
 
+
 # this is a reproduce of '03car_world' of ir_sim.
 # see https://github.com/hanruihua/intelligent-robot-simulator/blob/main/ir_sim/usage/03car_world/car_world.py for detial.
 class Ackermann2D(_baseAction2D):
+    def __init__(self, radian_tolerance=0, **kwargs):
+        super().__init__(**kwargs)
+        self._radian_tolerance = radian_tolerance
+    
+    @property
+    def radian_tolerance(self):
+        return self._radian_tolerance
+    
+    @radian_tolerance.setter
+    def radian_tolerance(self, radian_tolerance):
+        self._radian_tolerance = radian_tolerance
+    
     def update_action(self, F):
         nobj = self.n_obj
         dimension = self.dimension
@@ -715,7 +730,7 @@ class Ackermann2D(_baseAction2D):
             F.setValue(idxW_steer0 + i0, w_steer, addv=True)
         return True
     
-    def cal_des_vel(self, obji: "particleClass.ackermann2D", tolerance=0.12):
+    def cal_des_vel(self, obji: "particleClass.ackermann2D", **kwargs):
         def relative(state1, state2):
             dif = state2[0:2] - state1[0:2]
             dis = np.linalg.norm(dif)
@@ -726,14 +741,15 @@ class Ackermann2D(_baseAction2D):
         state2 = obji.goal
         v_max = obji.v_max
         w_max = obji.w_max
+        radian_tolerance = self.radian_tolerance
         
         dis, radian = relative(state1, state2)
         car_radian = obji.phi + obji.phi_steer
         diff_radian = spf.warpToPi(radian - car_radian)
         
-        if diff_radian > tolerance:
+        if diff_radian > radian_tolerance:
             w_opti = np.float32(w_max)
-        elif diff_radian < -tolerance:
+        elif diff_radian < -radian_tolerance:
             w_opti = -np.float32(w_max)
         else:
             w_opti = np.float32(0)
@@ -743,11 +759,9 @@ class Ackermann2D(_baseAction2D):
             w_opti = np.float32(0)
         else:
             v_opti = np.clip(v_max * np.cos(diff_radian), 0, None)
-        a = 1
         return v_opti, w_opti
     
     def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
-        # todo: latex version, eq kinetic... wu
         # \def\SetClass{article}
         # \documentclass{\SetClass}
         # \usepackage[linesnumbered,lined,boxed,commentsnumbered]{algorithm2e}
@@ -772,3 +786,41 @@ class Ackermann2D(_baseAction2D):
         W = np.tan(obji.phi_steer) * obji.u / obji.l_steer
         W_steer = obji.w_steer
         return U, W, W_steer
+
+
+class Ackermann_AlignAttract2D(Ackermann2D):
+    def cal_des_vel(self, obji: "particleClass.ackermann2D", **kwargs):
+        prb = self.father  # type: problemClass.Ackermann2DProblem
+        obji_idx = obji.index
+        relationHandle = prb.relationHandle  # type: relationClass._baseRelation2D
+        # relationHandle.dbg_showVoronoi()
+        theta_ij = relationHandle.theta_ij
+        rho_ij = relationHandle.rho_ij
+        
+        Wi1_align = 0
+        Wi1_attract = 0
+        Wi2 = 0
+        for objj in obji.neighbor_list:  # type: particleClass.particle2D
+            objj_idx = objj.index
+            tth = theta_ij[obji_idx, objj_idx]
+            tphi_ij = objj.phi - obji.phi
+            trho = rho_ij[obji_idx, objj_idx]
+            t2 = 1 + np.cos(tth)
+            Wi1_align += np.sin(tphi_ij) * t2
+            Wi1_attract += trho * np.sin(tth) * t2
+            Wi2 += t2
+        Wi1 = obji.align * Wi1_align + obji.attract * Wi1_attract
+        Wi = Wi1 / Wi2
+        return obji.u, Wi
+
+
+class Ackermann_phaseLag2D(phaseLag2D, Ackermann2D):
+    def cal_des_vel(self, obji: "particleClass.ackermann2D", **kwargs):
+        phaseLag = self.phaseLag
+        Wi = (obji.align * np.mean([np.sin(objj.phi - obji.phi - phaseLag)
+                                    for objj in obji.neighbor_list])
+              if obji.neighbor_list else 0)
+        return obji.u, Wi
+    
+    def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
+        return Ackermann2D.update_each_action(self, obji, **kwargs)
