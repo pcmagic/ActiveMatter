@@ -653,12 +653,10 @@ class do_ackermann(do_behaviorParticle2D):
         self._l_steer_list = kwargs["l_steer"]
         self._w_steer_list = kwargs["w_steer"]
     
-    # todo: add property of _l_steer_list wu
     @property
     def l_steer_list(self):
         return self._l_steer_list
     
-    # todo: add property of _l_steer_list wu
     @property
     def w_steer_list(self):
         return self._w_steer_list
