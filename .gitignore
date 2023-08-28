@@ -42,10 +42,13 @@ bck/*
 *dbg/
 *dbg/*
 */try_*/
+try/*/
 *_bck*
 MR_ch13_wheeled_mobile_robots.pdf
 MR.pdf
 collectiveFish/*/
+Parameter_settings
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
