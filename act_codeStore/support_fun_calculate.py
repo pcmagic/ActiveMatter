@@ -159,7 +159,7 @@ class _base_do2D(_base_doCalculate):
             # tptc.X = np.random.uniform(-self.Xlim, self.Xlim, (2,))
             tptc.X = np.random.uniform(-self.Xlim / 2, self.Xlim / 2, (2,))
             tptc.u = tun
-            tptc.w = 0
+            tptc.w = np.float64(0)
             self.problem.add_obj(tptc)
         spf.petscInfo(self.problem.logger, "  All the particles have a unified %s=%f, " % ("spin", 0), )
         spf.petscInfo(self.problem.logger, "  Generate %d particles with random seed %s" % (self.un.size, self.seed), )
@@ -319,8 +319,8 @@ class do_dbgBokaiZhang(do_behaviorParticle2D):
         self.problem.relationHandle.update_relation()
         self.problem.relationHandle.update_neighbor()
         self.problem.relationHandle.check_self()
-        act5.update_prepare()
-        _, Wall = act5.update_action_numpy()
+        act6.update_prepare()
+        _, Wall = act6.update_action_numpy()
         for tptc, wi in zip(self.problem.obj_list, Wall):
             t1 = tptc.phi if tptc.phi > 0 else 2 * np.pi + tptc.phi
             print("%3d, %15.10f, %15.10f, %15.10f, %15.10f" % (tptc.index, tptc.X[0], tptc.X[1], t1, wi))
@@ -638,10 +638,10 @@ class do_ackermann(do_behaviorParticle2D):
     def ini_kwargs(self):
         super().ini_kwargs()
         self._kwargs_necessary = self._kwargs_necessary + ["l_steer", "w_steer", "radian_tolerance"]
-        err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
-        assert self.kwargs["update_fun"] == "1fe", err_msg
-        err_msg = "wrong parameter update_order, only (0, 0) is acceptable. "
-        assert self.kwargs["update_order"] == (0, 0), err_msg
+        # err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
+        # assert self.kwargs["update_fun"] == "1fe", err_msg
+        # err_msg = "wrong parameter update_order, only (0, 0) is acceptable. "
+        # assert self.kwargs["update_order"] == (0, 0), err_msg
         return True
     
     def __init__(self, **kwargs):
@@ -677,7 +677,7 @@ class do_ackermann(do_behaviorParticle2D):
             tptc.phi = (np.random.sample((1,))[0] - 0.5) * 2 * np.pi
             tptc.X = np.random.uniform(-self.Xlim / 2, self.Xlim / 2, (2,))
             tptc.u = tun
-            tptc.w = 0
+            tptc.w = np.float64(0)
             tptc.w_steer = w_steer
             self.problem.add_obj(tptc)
         spf.petscInfo(self.problem.logger, "  All the particles have a unified %s=%f, " % ("spin", 0), )

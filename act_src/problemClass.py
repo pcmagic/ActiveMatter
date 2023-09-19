@@ -298,11 +298,11 @@ class _baseProblem(baseClass.baseObj):
         polar = (np.linalg.norm(np.sum([obji.P1 for obji in self.obj_list], axis=0)) / self.n_obj)
         return polar
     
-    @property
-    def milling_Daniel2014(self) -> np.asarray:
-        t1 = [np.cross(obji.X, obji.P1) / np.linalg.norm(obji.X) for obji in self.obj_list]
-        milling = np.linalg.norm(np.sum(t1, axis=0)) / self.n_obj
-        return milling
+    # @property
+    # def milling_Daniel2014(self) -> np.asarray:
+    #     t1 = [(np.cross(obji.X, obji.P1) / np.linalg.norm(obji.X)) for obji in self.obj_list]
+    #     milling = np.linalg.norm(np.sum(t1, axis=0)) / self.n_obj
+    #     return milling
     
     @property
     def speed(self) -> np.asarray:
@@ -403,7 +403,8 @@ class _baseProblem(baseClass.baseObj):
     
     def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001, pick_prepare=True):
         spf.petscInfo(self.logger, " ")
-        spf.petscInfo(self.logger, "Solve, start time: %s" % datetime.now().strftime("%Y-%m-%d %H:%M:%S"), )
+        spf.petscInfo(self.logger, "Solve, start time: %s" %
+                      datetime.now().strftime("%Y-%m-%d %H:%M:%S"), )
         
         self._update_start_time = datetime.now()
         (rtol, atol) = self.update_order
@@ -946,3 +947,55 @@ class Ackermann2DProblem(behavior2DProblem):
         self.W_steer_all = tF[(self.dimension + 1) * self.n_obj:]
         self.update_velocity()
         return True
+
+
+class ForceSphere2DProblem(_base2DProblem):
+    def _nothing(self):
+        pass
+    
+    def _get_y0(self, **kwargs):
+        y0 = self.Xall.ravel()
+        return y0
+    
+    def _rhsfunction(self, ts, t, Y, F):
+        # structure:
+        #   Y = [X_all]
+        #   F = [U_all]
+        X_all = self.Y2Xphi(Y)
+        self.Xall = X_all.reshape((-1, self.dimension))
+        self.update_position()
+        self.update_UWall(F)
+        tF = self.vec_scatter(F)
+        # F.destroy()
+        self.Uall = tF[: self.dimension * self.n_obj].reshape((-1, self.dimension))
+        self.Wall = tF[self.dimension * self.n_obj:]
+        self.update_velocity()
+        # F.assemble()
+        # spf.petscInfo(self.logger, ' ')
+        # spf.petscInfo(self.logger, 'dbg', t)
+        # spf.petscInfo(self.logger, '%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
+        #     Y.getArray()[0], Y.getArray()[1], Y.getArray()[2],
+        #     Y.getArray()[3], Y.getArray()[4], Y.getArray()[5], ))
+        # spf.petscInfo(self.logger, '%+.10f, %+.10f, %+.10f, %+.10f, %+.10f, %+.10f, ' % (
+        #     F.getArray()[0], F.getArray()[1], F.getArray()[2],
+        #     F.getArray()[3], F.getArray()[4], F.getArray()[5], ))
+        return True
+    
+    def Y2Xphi(self, Y):
+        y = self.vec_scatter(Y)
+        X_all = y
+        return X_all
+    
+    def update_position(self, **kwargs):
+        obji: particleClass.ForceSphere2D
+        assert self.n_obj == 1
+        obji = self.obj_list[0]
+        obji.update_position(self.Xall)
+        return True
+    
+    def print_info(self):
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')

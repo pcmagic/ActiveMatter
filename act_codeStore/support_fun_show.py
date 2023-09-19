@@ -29,7 +29,7 @@ from matplotlib.ticker import Locator
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.proj3d import proj_transform
 from mpl_toolkits.mplot3d.axes3d import Axes3D
-from matplotlib.colors import Normalize, ListedColormap, LinearSegmentedColormap  # , LogNorm
+from matplotlib.colors import Normalize, ListedColormap, LinearSegmentedColormap, TwoSlopeNorm
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, HPacker, VPacker
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
@@ -505,120 +505,9 @@ class midPowerNorm(Normalize):
 
 
 # user define color norm
-class midLinearNorm(Normalize):
+class midLinearNorm(TwoSlopeNorm):
     def __init__(self, midpoint=1, vmin=None, vmax=None, clip=False):
-        # clip: see np.clip, Clip (limit) the values in an array.
-        # assert 1 == 2
-        Normalize.__init__(self, vmin, vmax, clip)
-        self.midpoint = midpoint
-    
-    def __call__(self, value, clip=None):
-        if clip is None:
-            clip = self.clip
-        result, is_scalar = self.process_value(value)
-        # print(type(result))
-        
-        self.autoscale_None(result)
-        midpoint = self.midpoint
-        vmin, vmax = self.vmin, self.vmax
-        if vmin > vmax:
-            raise ValueError("minvalue must be less than or equal to maxvalue")
-        elif vmin == vmax:
-            result.fill(0)
-        else:
-            if clip:
-                mask = np.ma.getmask(result)
-                result = np.ma.array(np.clip(result.filled(vmax), vmin, vmax), mask=mask)
-            resdat = result.data
-            tidx1 = resdat < midpoint
-            tidx2 = np.logical_not(tidx1)
-            resdat1 = resdat[tidx1]
-            if vmin < midpoint:
-                tx, ty = [vmin, midpoint], [0, 0.5]
-                tuse1 = np.interp(resdat1, tx, ty)
-            else:
-                tuse1 = np.zeros_like(resdat1)
-            resdat2 = resdat[tidx2]
-            if vmax > midpoint:
-                tx, ty = [midpoint, vmax], [0.5, 1]
-                tuse2 = np.interp(resdat2, tx, ty)
-            else:
-                tuse2 = np.zeros_like(resdat2)
-            resdat[tidx1] = tuse1
-            resdat[tidx2] = tuse2
-            result = np.ma.array(resdat, mask=result.mask, copy=False)
-        return result
-
-
-class TwoSlopeNorm(Normalize):
-    # noinspection PyMissingConstructor
-    def __init__(self, vcenter, vmin=None, vmax=None):
-        """
-        Normalize data with a set center.
-
-        Useful when mapping data with an unequal rates of change around a
-        conceptual center, e.g., data that range from -2 to 4, with 0 as
-        the midpoint.
-
-        Parameters
-        ----------
-        vcenter : float
-            The data value that defines ``0.5`` in the normalization.
-        vmin : float, optional
-            The data value that defines ``0.0`` in the normalization.
-            Defaults to the min value of the dataset.
-        vmax : float, optional
-            The data value that defines ``1.0`` in the normalization.
-            Defaults to the the max value of the dataset.
-
-        Examples
-        --------
-        This maps data value -4000 to 0., 0 to 0.5, and +10000 to 1.0; data
-        between is linearly interpolated::
-
-            >>> import matplotlib.colors as mcolors
-            >>> offset = mcolors.TwoSlopeNorm(vmin=-4000.,
-                                              vcenter=0., vmax=10000)
-            >>> data = [-4000., -2000., 0., 2500., 5000., 7500., 10000.]
-            >>> offset(data)
-            array([0., 0.25, 0.5, 0.625, 0.75, 0.875, 1.0])
-        """
-        
-        self.vcenter = vcenter
-        self.vmin = vmin
-        self.vmax = vmax
-        if vcenter is not None and vmax is not None and vcenter >= vmax:
-            raise ValueError('vmin, vcenter, and vmax must be in '
-                             'ascending order')
-        if vcenter is not None and vmin is not None and vcenter <= vmin:
-            raise ValueError('vmin, vcenter, and vmax must be in '
-                             'ascending order')
-    
-    def autoscale_None(self, A):
-        """
-        Get vmin and vmax, and then clip at vcenter
-        """
-        super().autoscale_None(A)
-        if self.vmin > self.vcenter:
-            self.vmin = self.vcenter
-        if self.vmax < self.vcenter:
-            self.vmax = self.vcenter
-    
-    def __call__(self, value, clip=None):
-        """
-        Map value to the interval [0, 1]. The clip argument is unused.
-        """
-        result, is_scalar = self.process_value(value)
-        self.autoscale_None(result)  # sets self.vmin, self.vmax if None
-        
-        if not self.vmin <= self.vcenter <= self.vmax:
-            raise ValueError("vmin, vcenter, vmax must increase monotonically")
-        result = np.ma.masked_array(
-                np.interp(result, [self.vmin, self.vcenter, self.vmax],
-                          [0, 0.5, 1.]), mask=np.ma.getmask(result))
-        if is_scalar:
-            result = np.atleast_1d(result)[0]
-        return result
+        super().__init__(vcenter=midpoint, vmin=vmin, vmax=vmax)
 
 
 def RBGColormap(color: np.asarray, ifcheck=True):
@@ -1292,38 +1181,6 @@ def cal_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
     return t_use, avg_all
 
 
-def cal_avrInfo_raw(problem: 'problemClass._base2DProblem',
-                    t_tmin=-np.inf, t_tmax=np.inf,
-                    resampling_fct=1, interp1d_kind='quadratic',
-                    tavr=1, npabs=True):
-    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
-    if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
-        tidx[0] = False
-    t_hist = problem.t_hist[tidx]
-    t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
-    avg_stp = np.ceil(tavr / dt_res).astype('int')
-    t_return = t_use
-    weights = np.ones(avg_stp) / avg_stp
-    
-    W_avg = []
-    phi_avg = []
-    for obji in problem.obj_list:  # type:particleClass.particle2D
-        W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
-        phi_hist = get_continue_angle(t_hist, obji.phi_hist[tidx], t_use=t_use)
-        W_avg.append(np.convolve(weights, W_hist, mode='same'))
-        phi_avg.append(np.convolve(weights, phi_hist, mode='same'))
-    W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
-    phi_avg = np.vstack(phi_avg)
-    avg_stpD2 = avg_stp // 2
-    for i0 in np.arange(avg_stpD2):
-        W_avg[:, i0] = W_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
-        phi_avg[:, i0] = phi_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
-        i1 = - i0 - 1
-        W_avg[:, i1] = W_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
-        phi_avg[:, i1] = phi_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
-    return t_return, W_avg, phi_avg
-
-
 def cal_avrInfo(problem: 'problemClass._base2DProblem',
                 t_tmin=-np.inf, t_tmax=np.inf,
                 resampling_fct=1, interp1d_kind='quadratic',
@@ -1333,12 +1190,23 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
     if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
         tidx[0] = False
     t_hist = problem.t_hist[tidx]
+    
+    # without interpolation.
+    if tavr is None:
+        tidx2 = (t_hist >= t_tmin) * (t_hist <= t_tmax)
+        t_use = t_hist[tidx2]
+        W_avg = np.vstack([obji.W_hist[tidx] for obji in problem.obj_list])[:, tidx2][:, 1:]
+        phi_avg = np.vstack([obji.phi_hist[tidx] for obji in problem.obj_list])[:, tidx2][:, 1:]
+        W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
+        return t_use, W_avg, phi_avg
+    
+    # interpolation
     t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
     avg_stp = np.ceil(tavr / dt_res).astype('int')
     weights = np.ones(avg_stp) / avg_stp
     err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
     assert avg_stp <= t_use.size, err_msg
-    
+    #
     W_avg = []
     phi_avg = []
     for obji in problem.obj_list:  # type:particleClass.particle2D
@@ -1355,12 +1223,33 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
         i1 = - i0 - 1
         W_avg[:, i1] = W_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
         phi_avg[:, i1] = phi_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
-    
-    tidx = (t_use >= t_tmin) * (t_use <= t_tmax)
-    t_use = t_use[tidx]
-    W_avg = W_avg[:, tidx]
-    phi_avg = phi_avg[:, tidx]
+    #
+    tidx2 = (t_use >= t_tmin) * (t_use <= t_tmax)
+    t_use = t_use[tidx2]
+    W_avg = W_avg[:, tidx2]
+    phi_avg = phi_avg[:, tidx2]
     return t_use, W_avg, phi_avg
+
+
+def fun_sort_idx(t_plot, W_avg, phi_avg, sort_type='normal', sort_idx=None):
+    def sort_normal(t_plot, W_avg, phi_avg):
+        assert t_plot.size - W_avg.shape[1] in (0, 1)
+        t_use = t_plot[-W_avg.shape[1]:]
+        t_threshold = (t_use.max() - t_use.min()) / 2 + t_use.min()
+        tidx = t_use > t_threshold
+        dt = np.hstack((0, np.diff(t_use)))
+        sort_idx = np.argsort(np.mean(np.abs(W_avg[:, tidx] * dt[tidx]), axis=-1))
+        return sort_idx
+    
+    sort_dict = {
+        'normal':    sort_normal,
+        'traveling': lambda t_plot, W_avg, phi_avg: np.argsort(phi_avg[:, -1])
+        }
+    try:
+        sort_idx = sort_dict[sort_type](t_plot, W_avg, phi_avg) if sort_idx is None else sort_idx
+    except:
+        raise ValueError('wrong sort_type, current: %s, accept: %s' % (sort_type, sort_dict.keys()))
+    return sort_idx
 
 
 def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
@@ -1368,23 +1257,24 @@ def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
                           plt_tmin=-np.inf, plt_tmax=np.inf,
                           resampling_fct=1, interp1d_kind='quadratic',
                           vmin='None', vmax=1, cmap=plt.get_cmap('bwr'), tavr=1, npabs=True,
-                          sort_idx=None):
+                          sort_type='normal', sort_idx=None, norm='Normalize'):
     if vmin == 'None':
         vmin = 0 if npabs else -1
     align = problem.align
-    t_plot, W_avg, _ = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
-                                   resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
-                                   tavr=tavr, npabs=npabs)
-    sort_idx = np.argsort(np.mean(W_avg[:, t_plot > t_plot.max() / 2], axis=-1)) \
-        if sort_idx is None else sort_idx
+    t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                         resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                         tavr=tavr, npabs=npabs)
+    sort_idx = fun_sort_idx(t_plot, W_avg, phi_avg, sort_type=sort_type, sort_idx=sort_idx)
+
     
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
-    norm = Normalize(vmin=vmin, vmax=vmax)
+    norm = Normalize(vmin=vmin, vmax=vmax) if norm == 'Normalize' else norm
     obj_idx = np.arange(0, problem.n_obj + 1)
+    # t_plot = np.hstack((t_plot, t_plot.max() + problem.eval_dt))
     c = axi.pcolorfast(t_plot, obj_idx, W_avg[sort_idx, :] / align, cmap=cmap, norm=norm)
     clb = fig.colorbar(c, ax=axi)
-    if tavr > problem.eval_dt:
+    if tavr is not None and (tavr > problem.eval_dt):
         if npabs:
             clb.ax.set_title('$\\langle | \\delta \\varphi | \\rangle / \\sigma $', fontsize='small')
         else:
@@ -1413,30 +1303,20 @@ def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
     return fig, axi
 
 
-def core_avrPhase(problem: 'problemClass._base2DProblem',
-                  figsize=np.array((50, 50)) * 5, dpi=100,
-                  plt_tmin=-np.inf, plt_tmax=np.inf,
-                  resampling_fct=1, interp1d_kind='quadratic',
-                  cmap=plt.get_cmap('bwr'), tavr=1,
-                  sort_type='normal', sort_idx=None):
-    sort_dict = {
-        'normal':    lambda: np.argsort(np.mean(W_avg[:, t_plot > t_plot.max() / 2], axis=-1)),
-        'traveling': lambda: np.argsort(phi_avg[:, -1])
-        }
+
+
+def core_avrPhase(problem: 'problemClass._base2DProblem', figsize=np.array((50, 50)) * 5, dpi=100,
+                  plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=1, interp1d_kind='quadratic',
+                  cmap=plt.get_cmap('bwr'), tavr=1, sort_type='normal', sort_idx=None):
     t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
                                          resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
                                          tavr=tavr)
-    try:
-        sort_idx = sort_dict[sort_type]() if sort_idx is None else sort_idx
-    except:
-        raise ValueError('wrong sort_type, current: %s, accept: %s' % (sort_type, sort_dict.keys()))
-    
+    sort_idx = fun_sort_idx(t_plot, W_avg, phi_avg, sort_type=sort_type, sort_idx=sort_idx)
+
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
-    
     vmin, vmax = -1, 1
     norm = Normalize(vmin=vmin, vmax=vmax)
-    
     obj_idx = np.arange(0, problem.n_obj + 1)
     # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
     c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx, :] / np.pi, cmap=cmap, norm=norm)

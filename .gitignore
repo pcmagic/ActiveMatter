@@ -48,7 +48,8 @@ MR_ch13_wheeled_mobile_robots.pdf
 MR.pdf
 collectiveFish/*/
 Parameter_settings
-
+.github/
+qodana.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -9,7 +9,6 @@ import abc
 import numpy as np
 from petsc4py import PETSc
 
-from act_codeStore.support_fun import warpToPi
 from act_src import baseClass
 from act_src import particleClass
 from act_src import problemClass
@@ -22,8 +21,8 @@ from act_codeStore import support_fun as spf
 
 
 class _baseAction(baseClass.baseObj):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, name="...", **kwargs):
+        super().__init__(name, **kwargs)
         self._obj_list = uniqueList(acceptType=particleClass._baseParticle)  # contain objects
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
         self._dmda = None
@@ -109,8 +108,8 @@ class _baseAction(baseClass.baseObj):
 
 
 class _baseAction2D(_baseAction):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, name="...", **kwargs):
+        super().__init__(name=name, **kwargs)
         self._dimension = 2  # 2 for 2D
         self._obj_list = uniqueList(acceptType=particleClass.particle2D)  # contain objects
     
@@ -130,7 +129,8 @@ class _baseAction2D(_baseAction):
             u, w = self.update_each_action(obji)
             # print('dbg', i1, obji, u, w)
             F.setValues((dimension * i1, dimension * i1 + 1), u, addv=True)
-            F.setValue(idxW0 + i0, w, addv=True)  # print('dbg', i0, [obji.X for obji in obj_list])
+            F.setValue(idxW0 + i0, w, addv=True)
+            # print('dbg', i0, [obji.X for obji in obj_list])
         # if self.type == 'phaseLag2D':
         #     print(F[:])
         return True
@@ -169,7 +169,9 @@ class Dipole2D(_baseAction2D):
             tth = theta_ij[obji_idx, objj_idx]
             trho = rho_ij[obji_idx, objj_idx]
             te_rho = e_rho_ij[obji_idx, objj_idx]
-            t1 = np.dot(np.array(((np.cos(tth), -np.sin(tth)), (np.sin(tth), np.cos(tth)))), te_rho, )
+            t1 = np.dot(np.array(((np.cos(tth), -np.sin(tth)),
+                                  (np.sin(tth), np.cos(tth)))),
+                        te_rho, )
             uij = (objj.dipole * obji.u / np.pi) * (t1 / trho ** 2)
             Ui += uij
         assert 1 == 2
@@ -181,133 +183,10 @@ class FiniteDipole2D(Dipole2D):
         super().check_self()
         
         prb = self.father  # type: problemClass.behavior2DProblem
-        err_handle = "wrong particle type. particle name: %s, current type: %s, expect type: %s. "
-        
+        err_handle = 'wrong particle type. particle name: %s, current type: %s, expect type: %s. '
         # todo: modify prb.obj_list
-        def __init__(self, name="...", **kwargs):
-            super().__init__(name, **kwargs)
-            # self._type = 'particle2D'
-            self._dimension = 2  # 2 for 2D
-            self._viewRange = np.ones(1) * np.pi  # how large the camera can view.
-            self._phi_steer = 0  # particle self-spin speed
-            self._P1 = np.array((1, 0))  # major norm P1, for 2D version
-            self._phi = 0  # angular coordinate of P1
-            self._phi_hist = []  # major norm P1, for 2D version
-            
-            self._X = np.array((0, 0))  # particle center coordinate
-            self._U = np.nan * np.array((0, 0))  # particle translational velocity in global coordinate
-            self._phi_steer = np.nan * np.array((0,))  # particle rotational velocity in global coordinate
-            self._neighbor_list = uniqueList(acceptType=type(self))
-            self.update_phi()
-        
-        @_baseAction.father.setter
-        def father(self, father):
-            assert isinstance(father, problemClass._base2DProblem)
-            self._father = father
-        
-        @property
-        def viewRange(self):
-            return self._viewRange
-        
-        @property
-        def phi_steer(self):
-            return self._phi_steer
-        
-        @phi_steer.setter
-        def w(self, phi_steer):
-            self._phi_steer = phi_steer
-        
-        @_baseAction.P1.setter
-        def P1(self, P1):
-            # err_msg = 'wrong array size'
-            # assert P1.size == 2, err_msg
-            _baseAction.P1.fset(self, P1)
-            self.update_phi()
-        
-        @property
-        def phi(self):
-            return self._phi
-        
-        @phi.setter
-        def phi(self, phi):
-            # phi = np.hstack((phi,))
-            err_msg = "phi is a scale. "
-            assert phi.size == 1, err_msg
-            assert -np.pi <= phi <= np.pi, phi
-            self._phi = phi
-            self.update_P1()
-        
-        @_baseAction.phi_steer.setter
-        def phi_steer(self, phi_steer):
-            err_msg = "phi_steer is a scale. "
-            assert phi_steer.size == 1, err_msg
-            _baseAction.phi_steer.fset(self, phi_steer)
-        
-        @property
-        def phi_hist(self):
-            return self._phi_hist
-        
-        def update_phi(self):
-            self._phi = np.arctan2(self._P1[1], self._P1[0])
-            return True
-        
-        def update_P1(self):
-            phi = self._phi
-            self._P1 = np.array((np.cos(phi), np.sin(phi)))
-            return True
-        
-        def update_position(self, X, phi, **kwargs):
-            self.X = X
-            self.phi = warpToPi(phi)
-            return True
-        
-        def do_store_data(self, **kwargs):
-            super().do_store_data()
-            if self.rank0:
-                self.phi_hist.append(self.phi)  # phi is a float, no necessary to copy.
-            return True
-        
-        def empty_hist(self, **kwargs):
-            super().empty_hist()
-            self._phi_hist = np.nan
-            return True
-        
-        def hdf5_pick(self, handle, **kwargs):
-            hdf5_kwargs = self.father.hdf5_kwargs
-            obji_hist = super().hdf5_pick(handle, **kwargs)
-            obji_hist.create_dataset("phi_hist", data=self.phi_hist, **hdf5_kwargs)
-            return obji_hist
-        
-        def hdf5_load(self, handle, **kwargs):
-            obji_hist = super().hdf5_load(handle, **kwargs)
-            self._phi_hist = obji_hist["phi_hist"][:]
-            return obji_hist
-        
-        def check_self(self, **kwargs):
-            super().check_self()
-            err_msg = "wrong parameter value: %s "
-            assert self.dimension in (2,), err_msg % "dimension"
-            assert isinstance(self.father, problemClass._base2DProblem), (err_msg % "father")
-            assert self.X.shape == (2,), err_msg % "X"
-            assert self.U.shape == (2,), err_msg % "U"
-            assert self.phi_steer.size == 1, err_msg % "W"
-            for obji in self.neighbor_list:
-                assert isinstance(obji, interaction2D), err_msg % "neighbor_list"
-            assert np.isfinite(self.P1).all(), err_msg % "P1"
-            assert self.P1.shape == (2,), err_msg % "P1"
-            assert isinstance(self.phi, np.float64), err_msg % "phi"
-            assert np.isfinite(self.phi), err_msg % "phi"
-            return True
-        
-        def update_finish(self):
-            super().update_finish()
-            if self.rank0:
-                self._phi_steer_hist = np.hstack(self.phi_steer_hist)
-                self._phi_hist = np.hstack(self.phi_hist)
-            return True
-        
         for obji in prb.obj_list:  # type: particleClass._baseParticle
-            err_msg = err_handle % (obji.index, obji.type, "finiteDipole2D")
+            err_msg = err_handle % (obji.index, obji.type, 'finiteDipole2D')
             assert isinstance(obji, particleClass.finiteDipole2D), err_msg
         return True
     
@@ -371,7 +250,9 @@ class Attract2D(_baseAction2D):
             trho = rho_ij[obji_idx, objj_idx]
             t2 = 1 + np.cos(tth)
             Wi1 += trho * np.sin(tth) * t2
-            Wi2 += t2  # print()  # print(obji_idx, objj_idx, tth, objj.attract * trho * np.sin(tth) * t2, t2)
+            Wi2 += t2
+            # print()
+            # print(obji_idx, objj_idx, tth, objj.attract * trho * np.sin(tth) * t2, t2)
         Wi = obji.attract * Wi1 / Wi2
         return np.zeros(2), Wi
 
@@ -416,7 +297,9 @@ class Align2D(_baseAction2D):
             tphi_ij = objj.phi - obji.phi
             t2 = 1 + np.cos(tth)
             Wi1 += np.sin(tphi_ij) * t2
-            Wi2 += t2  # print()  # print(obji_idx, objj_idx, tphi_ij, obji.align  * np.sin(tphi_ij) * t2, t2)
+            Wi2 += t2
+            # print()
+            # print(obji_idx, objj_idx, tphi_ij, obji.align  * np.sin(tphi_ij) * t2, t2)
         Wi = obji.align * Wi1 / Wi2
         return np.zeros(2), Wi
 
@@ -441,7 +324,9 @@ class AlignAttract2D(_baseAction2D):
             t2 = 1 + np.cos(tth)
             Wi1_align += np.sin(tphi_ij) * t2
             Wi1_attract += trho * np.sin(tth) * t2
-            Wi2 += t2  # print()  # print(obji_idx, objj_idx, tphi_ij, obji.align  * np.sin(tphi_ij) * t2, t2)
+            Wi2 += t2
+            # print()
+            # print(obji_idx, objj_idx, tphi_ij, obji.align  * np.sin(tphi_ij) * t2, t2)
         Wi1 = obji.align * Wi1_align + obji.attract * Wi1_attract
         Wi = Wi1 / Wi2
         return np.zeros(2), Wi
@@ -534,7 +419,9 @@ class phaseLag2D_Wiener(phaseLag2D):
         #
         phaseLag_random = phaseLag_rdm_fct * np.random.normal()
         Wi = (obji.align * np.mean(
-                [np.sin(objj.phi - obji.phi - phaseLag - phaseLag_random) for objj in obji.neighbor_list]) if obji.neighbor_list else 0)
+                [np.sin(objj.phi - obji.phi - phaseLag - phaseLag_random)
+                 for objj in obji.neighbor_list])
+              if obji.neighbor_list else 0)
         #
         # phaseLag_random = phaseLag_rdm_fct * np.random.normal()
         # Wi = obji.align  * np.mean(
@@ -553,7 +440,8 @@ class phaseLag2D_Wiener(phaseLag2D):
     
     def print_info(self):
         baseClass.baseObj.print_info(self)
-        spf.petscInfo(self.father.logger, "  phaseLag=%f, phaseLag_random=%f" % (self.phaseLag, self.phaseLag_rdm_fct), )
+        spf.petscInfo(self.father.logger, "  phaseLag=%f, phaseLag_random=%f"
+                      % (self.phaseLag, self.phaseLag_rdm_fct), )
         return True
 
 
@@ -682,8 +570,9 @@ class AttractRepulsion2D_point(_baseAction2D):
         
         if len(obji.neighbor_list) > 0:
             tphi = (np.array([theta_ij[obji_idx, index] for index in neighbor_idx_list]) + obji.phi)
-            Vi = np.array(
-                    [self.k1 * rho_ij[obji_idx, index] ** self.k2 + self.k3 * rho_ij[obji_idx, index] ** self.k4 for index in neighbor_idx_list])
+            Vi = np.array([self.k1 * rho_ij[obji_idx, index] ** self.k2 +
+                           self.k3 * rho_ij[obji_idx, index] ** self.k4
+                           for index in neighbor_idx_list])
             Ui = np.array((np.mean(Vi * np.cos(tphi)), np.mean(Vi * np.sin(tphi)))) + np.zeros(2)
         else:
             Ui = np.zeros(2)
@@ -824,3 +713,19 @@ class Ackermann_phaseLag2D(phaseLag2D, Ackermann2D):
     
     def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
         return Ackermann2D.update_each_action(self, obji, **kwargs)
+
+
+class ForceSphere2D(_baseAction2D):
+    def update_prepare(self):
+        pass
+    
+    def update_action(self, F):
+        assert self.n_obj == 1
+        assert self.dimension == 2
+        
+        obji = self.obj_list[0]
+        prb_MR = obji.prb_MR
+        prb_MR.create_matrix()
+        prb_MR.solve_resistance()
+        F[:] = prb_MR.get_velocity()
+        return True

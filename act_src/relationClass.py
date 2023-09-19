@@ -19,13 +19,6 @@ from act_src import problemClass
 from act_codeStore import support_fun as spf
 
 
-# from act_codeStore import support_fun as spf
-
-
-# from act_codeStore.support_class import *
-
-
-# from act_codeStore.support_class import *
 
 class _baseRelation(baseClass.baseObj):
     @abc.abstractmethod
@@ -214,6 +207,23 @@ class _baseRelation2D(_baseRelation):
         spf.petscInfo(self.father.logger, '  overlap_epsilon=%e' % self.overlap_epsilon)
         return True
 
+class singleRelation2D(_baseRelation2D):
+    def update_relation(self, **kwargs):
+        pass
+        return True
+    
+    def update_neighbor(self, **kwargs):
+        prb = self.father  # type: problemClass._baseProblem
+        assert prb.n_obj == 1
+        
+        obji = prb.obj_list[0]
+        obji.neighbor_list.clear()
+        obji.neighbor_list.append_noCheck(obji)
+        return True
+
+    def check_self(self, **kwargs):
+        pass
+        return True
 
 class finiteRelation2D(_baseRelation2D):
     def update_relation(self, **kwargs):
@@ -247,7 +257,6 @@ class _VoronoiBaseRelation2D(AllBaseRelation2D):
         X_list = prb.Xall
         vor = Voronoi(X_list)
         idx_X2ridge = [[] for _ in vor.points]
-        idx_ridge: int
         for idx_ridge, (X0, X1) in enumerate(vor.ridge_points):
             idx_X2ridge[X0].append(idx_ridge)
             idx_X2ridge[X1].append(idx_ridge)

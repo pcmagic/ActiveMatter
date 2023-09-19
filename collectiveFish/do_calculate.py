@@ -1,6 +1,6 @@
 import sys
 
-import numpy as np
+# import numpy as np
 import petsc4py
 
 # import matplotlib
@@ -14,9 +14,10 @@ from petsc4py import PETSc
 
 # from datetime import datetime
 from tqdm import tqdm
-import shutil
-import os
-from matplotlib import colors as mcolors
+# import shutil
+# import os
+# from matplotlib import colors as mcolors
+from matplotlib import pyplot as plt
 
 from act_src import problemClass
 from act_src import relationClass
@@ -315,6 +316,7 @@ def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
     return True
 
 
+#
 @profile(filename="profile_out")
 def main_profile(**main_kwargs):
     return main_fun(**main_kwargs)
