@@ -17,6 +17,7 @@ import time
 import shutil
 import os
 import h5py
+import sys
 from matplotlib import pyplot as plt
 
 from act_src import baseClass
@@ -62,8 +63,12 @@ class _baseProblem(baseClass.baseObj):
                 tprint = True
             os.makedirs(fileHandle)
             #
-            logging.basicConfig(handlers=[logging.FileHandler(filename=self.log_name, mode="w"), logging.StreamHandler(), ], level=logging.INFO,
+            logging.basicConfig(handlers=[logging.FileHandler(filename=self.log_name, mode="w"),
+                                          logging.StreamHandler(), ],
+                                level=logging.INFO,
                                 format="%(message)s", )
+            sys.stdout = spf.MyLogger(self.logger, logging.INFO)
+            sys.stderr = spf.MyLogger(self.logger, logging.ERROR)
         time.sleep(0.1)
         #
         if tprint:
@@ -435,6 +440,7 @@ class _baseProblem(baseClass.baseObj):
         ts.setMonitor(self._monitor)
         ts.setPostStep(self._postfunction)
         ts.setExactFinalTime(PETSc.TS.ExactFinalTime.MATCHSTEP)
+        ts.setMaxStepRejections(10000000)
         # ts.setExactFinalTime(PETSc.TS.ExactFinalTime.INTERPOLATE)
         ts.setFromOptions()
         ts.setSolution(y)
@@ -628,6 +634,7 @@ class _baseProblem(baseClass.baseObj):
         for acti in self.action_list:  # type: interactionClass._baseAction
             acti.print_info()
         self.relationHandle.print_info()
+        spf.petscInfo(self.logger, " ")
         return True
     
     # def dbg_t_hist(self, t_hist):  #     self._t_hist = t_hist  #     return True
