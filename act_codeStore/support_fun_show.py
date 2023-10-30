@@ -596,7 +596,7 @@ def get_increase_angle(ty1):
     return ty
 
 
-def get_continue_angle(tx, ty1, t_use=None, interp1d_kind='quadratic'):
+def get_continue_angle(tx, ty1, t_use=None, interp1d_kind='quadratic', bounds_error=True):
     if t_use is None:
         t_use = np.linspace(tx.min(), tx.max(), 2 * tx.size)
     if np.array(t_use).size == 1:
@@ -604,7 +604,7 @@ def get_continue_angle(tx, ty1, t_use=None, interp1d_kind='quadratic'):
     
     ty = get_increase_angle(ty1)
     intp_fun1d = interpolate.interp1d(tx, ty, kind=interp1d_kind, copy=False, axis=0,
-                                      bounds_error=True)
+                                      bounds_error=bounds_error)
     ty = intp_fun1d(t_use) % (2 * np.pi)
     ty[ty > np.pi] = ty[ty > np.pi] - 2 * np.pi
     return ty
