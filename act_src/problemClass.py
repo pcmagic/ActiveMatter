@@ -51,6 +51,9 @@ class _baseProblem(baseClass.baseObj):
             "chunks": True,  # 'compression': 'lzf',
             # 'compression_opts': 9,
             }
+        self.ts = PETSc.TS().create(comm=self.comm)  # time-dependent PDEs.
+        self.ts_y = None
+        self.ts_f = None
         
         # clear dir
         fileHandle = self.name
@@ -406,53 +409,116 @@ class _baseProblem(baseClass.baseObj):
         self.relationHandle.check_self()
         return True
     
-    def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001, pick_prepare=True):
-        spf.petscInfo(self.logger, " ")
-        spf.petscInfo(self.logger, "Solve, start time: %s" %
-                      datetime.now().strftime("%Y-%m-%d %H:%M:%S"), )
-        
+    def ts_setUp(self, y, f):
+        ts = self.ts
+        ts.setProblemType(ts.ProblemType.NONLINEAR)
+        ts.setType(ts.Type.RK)
+        ts.setRKType(self.update_fun)
+        ts.setRHSFunction(self._rhsfunction, f)
+        ts.setTime(self.t0)
+        ts.setMaxTime(self.t1)
+        ts.setMaxSteps(self.max_it)
+        ts.setTimeStep(self.eval_dt)
+        ts.setMonitor(self._monitor)
+        ts.setPostStep(self._postfunction)
+        ts.setExactFinalTime(PETSc.TS.ExactFinalTime.MATCHSTEP)
+        # ts.setExactFinalTime(PETSc.TS.ExactFinalTime.INTERPOLATE)
+        ts.setMaxStepRejections(10000000)
+        ts.setFromOptions()
+        ts.setSolution(y)
+        ts.setTolerances(*self.update_order)
+        ts.setUp()
+        return ts
+    
+    def update_self_prepare(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
         self._update_start_time = datetime.now()
-        (rtol, atol) = self.update_order
-        update_fun = self.update_fun
-        tqdm_fun = self.tqdm_fun
         self.t0 = t0
         self.t1 = t1
         self.eval_dt = eval_dt
         self.max_it = max_it
         self.percentage = 0
         self.update_prepare()
-        if self.rank0:
-            self.tqdm = tqdm_fun(total=100, desc="  %s" % self.name)
         
         # do simulation
-        y0 = self._get_y0()
-        y = PETSc.Vec().createWithArray(y0, comm=self.comm)
-        f = y.duplicate()
-        ts = PETSc.TS().create(comm=self.comm)
-        ts.setProblemType(ts.ProblemType.NONLINEAR)
-        ts.setType(ts.Type.RK)
-        ts.setRKType(update_fun)
-        ts.setRHSFunction(self._rhsfunction, f)
-        ts.setTime(t0)
-        ts.setMaxTime(t1)
-        ts.setMaxSteps(max_it)
-        ts.setTimeStep(eval_dt)
-        ts.setMonitor(self._monitor)
-        ts.setPostStep(self._postfunction)
-        ts.setExactFinalTime(PETSc.TS.ExactFinalTime.MATCHSTEP)
-        ts.setMaxStepRejections(10000000)
-        # ts.setExactFinalTime(PETSc.TS.ExactFinalTime.INTERPOLATE)
-        ts.setFromOptions()
-        ts.setSolution(y)
-        ts.setTolerances(rtol, atol)
-        ts.setUp()
         # self._do_store_data(ts, 0, 0, y)
-        ts.solve(y)
-        
-        # finish simulation
-        self.update_finish(ts)
+        y0 = self._get_y0()
+        self.ts_y = PETSc.Vec().createWithArray(y0, comm=self.comm)
+        self.ts_f = self.ts_y.duplicate()
+        self.ts_setUp(self.ts_y, self.ts_f)
+        return True
+    
+    # def update_onestep(self):
+    #     #      while (!ts->reason) {
+    #     #        PetscCall(TSMonitor(ts, ts->steps, ts->ptime, ts->vec_sol));
+    #     #        if (!ts->steprollback) PetscCall(TSPreStep(ts));
+    #     #        PetscCall(TSStep(ts));
+    #     #        if (ts->testjacobian) PetscCall(TSRHSJacobianTest(ts, NULL));
+    #     #        if (ts->testjacobiantranspose) PetscCall(TSRHSJacobianTestTranspose(ts, NULL));
+    #     #        if (ts->quadraturets && ts->costintegralfwd) { /* Must evaluate the cost integral before event is handled. The cost integral value can also be rolled back. */
+    #     #          if (ts->reason >= 0) ts->steps--;            /* Revert the step number changed by TSStep() */
+    #     #          PetscCall(TSForwardCostIntegral(ts));
+    #     #          if (ts->reason >= 0) ts->steps++;
+    #     #        }
+    #     #        if (ts->forward_solve) {            /* compute forward sensitivities before event handling because postevent() may change RHS and jump conditions may have to be applied */
+    #     #          if (ts->reason >= 0) ts->steps--; /* Revert the step number changed by TSStep() */
+    #     #          PetscCall(TSForwardStep(ts));
+    #     #          if (ts->reason >= 0) ts->steps++;
+    #     #        }
+    #     #        PetscCall(TSPostEvaluate(ts));
+    #     #        PetscCall(TSEventHandler(ts)); /* The right-hand side may be changed due to event. Be careful with Any computation using the RHS information after this point. */
+    #     #        if (ts->steprollback) PetscCall(TSPostEvaluate(ts));
+    #     #        if (!ts->steprollback) {
+    #     #          PetscCall(TSTrajectorySet(ts->trajectory, ts, ts->steps, ts->ptime, ts->vec_sol));
+    #     #          PetscCall(TSPostStep(ts));
+    #     #          PetscCall(TSResize(ts));
+    #     #        }
+    #     #      }
+    #     #      PetscCall(TSMonitor(ts, ts->steps, ts->ptime, ts->vec_sol));
+    #     #
+    #     #      if (ts->exact_final_time == TS_EXACTFINALTIME_INTERPOLATE && ts->ptime > ts->max_time) {
+    #     #        if (!u) u = ts->vec_sol;
+    #     #        PetscCall(TSInterpolate(ts, ts->max_time, u));
+    #     #        ts->solvetime = ts->max_time;
+    #     #        solution      = u;
+    #     #        PetscCall(TSMonitor(ts, -1, ts->solvetime, solution));
+    #     #      } else {
+    #     #        if (u) PetscCall(VecCopy(ts->vec_sol, u));
+    #     #        ts->solvetime = ts->ptime;
+    #     #        solution      = ts->vec_sol;
+    #     #      }
+    #     #    }
+    #     pass
+    
+    def update_self_finish(self, pick_prepare=True):
+        self.update_finish()
         if pick_prepare:
             self.pick_prepare()
+        return True
+    
+    def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001, pick_prepare=True):
+        if self.rank0:
+            self._tqdm = self.tqdm_fun(total=100, desc="  %s" % self.name)
+        
+        self.update_self_prepare(t1, t0, max_it, eval_dt)
+        self.ts.solve(self.ts_y)
+        self.update_self_finish(pick_prepare)
+        return True
+    
+    def update_self_onestep(self, t1):
+        # self.percentage = 0
+        # self.t0 = self.t1
+        # self.t1 = t1
+        
+        # if self.rank0:
+        #     self._tqdm = self.tqdm_fun(total=100, desc="  %s" % self.name)
+        #
+        self.ts.setMaxTime(self.t1)
+        # self.ts.setUp()
+        self.ts.solve(self.ts_y)
+        #
+        # if self.rank0:
+        #     self.tqdm.update(100 - self.percentage)
+        #     self.tqdm.close()
         return True
     
     @abc.abstractmethod
@@ -494,9 +560,9 @@ class _baseProblem(baseClass.baseObj):
         save_every = self._save_every
         # print(ts.getTimeStep())
         if not i % save_every:
-            percentage = np.clip((t - self._t0) / (self._t1 - self._t0) * 100, 0, 100)
+            percentage = np.clip((t - self.t0) / (self.t1 - self.t0) * 100, 0, 100)
             dp = int(percentage - self.percentage)
-            if (dp >= 1) and self.rank0:
+            if (dp >= 1) and self.tqdm is not None:
                 self.tqdm.update(dp)
                 self.percentage = self.percentage + dp
             self._do_store_data(ts, i, t, Y)
@@ -505,8 +571,8 @@ class _baseProblem(baseClass.baseObj):
     def _postfunction(self, ts):
         return True
     
-    def update_finish(self, ts):
-        if self.rank0:
+    def update_finish(self):
+        if self.tqdm is not None:
             self.tqdm.update(100 - self.percentage)
             self.tqdm.close()
         time.sleep(0.1)
@@ -514,6 +580,7 @@ class _baseProblem(baseClass.baseObj):
         self._update_stop_time = datetime.now()
         spf.petscInfo(self.logger, "Solve, usage time: %s" % str(self._update_stop_time - self._update_start_time), )
         spf.petscInfo(self.logger, " ")
+        self.ts.destroy()
         return True
     
     def pick_prepare(self):
@@ -528,8 +595,20 @@ class _baseProblem(baseClass.baseObj):
         return True
     
     def _destroy_problem(self):
-        if self.rank0:
+        if self.tqdm is not None:
             self._tqdm = None
+        #
+        if self.ts is not None:
+            self.ts.destroy()
+            self.ts = None
+        #
+        if self.ts_y is not None:
+            self.ts_y.destroy()
+            self.ts_y = None
+        #
+        if self.ts_f is not None:
+            self.ts_f.destroy()
+            self.ts_f = None
         return True
     
     def destroy_self(self, **kwargs):
@@ -764,8 +843,7 @@ class behavior2DProblem(_base2DProblem):
         self._attract = np.nan  # attract intensity
         self._align = np.nan  # align intensity
         self._viewRange = np.ones(1) * np.pi  # how large the camera can view
-        self._lightDecayFct = (1  # how light strength decay in water, S = S0 * exp(-lightDecayFct * rho)
-                               )
+        self._lightDecayFct = 1  # how light strength decay in water, S = S0 * exp(-lightDecayFct * rho)
     
     @property
     def attract(self):
@@ -903,12 +981,47 @@ class Ackermann2DProblem(behavior2DProblem):
         
         for obji, Xi, phii, phi_steeri in zip(self.obj_list, self.Xall, self.Phiall, self.Phi_steer_all):
             obji.update_position(Xi, phii, phi_steer=phi_steeri)
-        
-        # update Y as phi_steer is wrapped into (-phi_steer_limit, +phi_steer_limit).
         self.Phi_steer_all = np.hstack([objj.phi_steer for objj in self.obj_list])
+
+        # update Y as phi_steer is wrapped into (-phi_steer_limit, +phi_steer_limit).
+        # # version 1
+        # Y = ts.getSolution()
+        # Y[:] = np.hstack((self.Xall.ravel(), self.Phiall, self.Phi_steer_all))
+        # # spf.petscInfo(self.logger, Y[:])
+        # Y.assemble()
+        # version 2
         Y = ts.getSolution()
-        Y[:] = np.hstack((self.Xall.ravel(), self.Phiall, self.Phi_steer_all))
+        dimension = self.dimension
+        idxW0 = dimension * self.n_obj
+        idxW_steer0 = (dimension + 1) * self.n_obj
+        for i0 in range(self.action_list[0].dmda.getRanges()[0][0],
+                        self.action_list[0].dmda.getRanges()[0][1]):
+            obji = self.obj_list[i0]
+            i1 = obji.index
+            Y.setValues((dimension * i1, dimension * i1 + 1), obji.X)
+            Y.setValue(idxW0 + i0, obji.phi)
+            Y.setValue(idxW_steer0 + i0, obji.phi_steer)
+        # spf.petscInfo(self.logger, Y[:])
         Y.assemble()
+        # # version 3
+        # dimension = self.dimension
+        # idxW0 = dimension * self.n_obj
+        # idxW_steer0 = (dimension + 1) * self.n_obj
+        # Y = ts.getSolution()
+        # for i0 in range(self.action_list[0].dmda.getRanges()[0][0],
+        #                 self.action_list[0].dmda.getRanges()[0][1]):
+        #     obji = self.obj_list[i0]
+        #     i1 = obji.index
+        #     # spf.petscInfo(self.logger, '%d, %d' % (i0, i1))
+        #     # assert i0 == i1
+        #     Xi = self.Xall[i1]
+        #     phii = self.Phiall[i1]
+        #     phi_steeri = self.Phi_steer_all[i1]
+        #     obji.update_position(Xi, phii, phi_steer=phi_steeri)
+        #     Y.setValues((dimension * i1, dimension * i1 + 1), obji.X)
+        #     Y.setValue(idxW0 + i0, obji.phi)
+        #     Y.setValue(idxW_steer0 + i0, obji.phi_steer)
+        # Y.assemble()
         return True
     
     def update_velocity(self, **kwargs):

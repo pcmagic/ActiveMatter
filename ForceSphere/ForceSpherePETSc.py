@@ -87,7 +87,7 @@ def get_problem_kwargs(**main_kwargs):
     # todo: modify
     problem_kwargs = get_solver_kwargs()
     OptDB = PETSc.Options()
-    fileHandle = OptDB.getString('f', 'ForceSpherePETSc')
+    fileHandle = OptDB.getString('f', 'dbg_ForceSpherePETSc')
     OptDB.setValue('f', fileHandle)
     problem_kwargs['fileHandle'] = fileHandle
     kT1 = OptDB.getReal('kT1', 4.141947e-06)
@@ -106,7 +106,7 @@ def get_problem_kwargs(**main_kwargs):
     sdis = 1.0e-10  # 最小表面间距
     dt = 2.50e-5 * dt0  # 时间步长
     time_h = 4 * dt  # 龙格库塔法时间步长
-    For = 0.1  # 给定活性粒子的推进力
+    For = 1  # 给定活性粒子的推进力
     Tor = 0.0 * kT  # 给定活性粒子的力矩
     N_dat = 200.0  # 数据输出（4的倍数）
     N_fig = 1000.0  # 画图（4的倍数）
@@ -266,6 +266,7 @@ def main_fun(**main_kwargs):
     problem_kwargs = get_problem_kwargs(**main_kwargs)
     print_case_info(**problem_kwargs)
     fileHandle = problem_kwargs['fileHandle']
+    problem_kwargs['matrix_method'] = 'forceSphere2d'
     
     # test damo
     # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
@@ -324,5 +325,70 @@ def main_fun(**main_kwargs):
     return True
 
 
+def main_fun_v2(**main_kwargs):
+    problem_kwargs = get_problem_kwargs(**main_kwargs)
+    print_case_info(**problem_kwargs)
+    fileHandle = problem_kwargs['fileHandle']
+    problem_kwargs['matrix_method'] = 'forceSphere2d_simp'
+    problem_kwargs['length'] = 3
+    problem_kwargs['width'] = 3
+    problem_kwargs['sdis'] = 1.0e-4  # 最小表面间距
+
+    # test damo
+    # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
+    # sphere_R, sphere_X, D3 = partical_generator_random(**problem_kwargs)
+    sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
+    dof = sphere_X.shape[1]
+    
+    sphere_geo0 = sphere_particle_2d()
+    sphere_geo0.set_dof(dof)
+    sphere_geo0.set_nodes(sphere_X, -1)
+    sphere_geo0.set_sphere_R(sphere_R)
+    sphere_geo0.set_velocity(np.zeros_like(sphere_X).flatten())
+    sphere_geo0.set_phi(sphere_phi)
+    #
+    sphere_obj0 = ForceSphereObj()
+    sphere_obj0.set_data(f_geo=sphere_geo0, u_geo=sphere_geo0, name=fileHandle)
+    #
+    prb_MR = sf.ForceSphere2DProblem(**problem_kwargs)
+    prb_MR.add_obj(sphere_obj0)
+    prb_MR.create_matrix()
+    prb_MR.solve_resistance()
+    
+    # # loop
+    # prb_loop = problemClass.ForceSphere2DProblem(name=fileHandle, **problem_kwargs)
+    # spf.petscInfo(prb_loop.logger, "#" * 72)
+    # spf.petscInfo(prb_loop.logger, "Generate Problem. ")
+    # # self._un = np.zeros_like(...)
+    # # self._ln = np.zeros_like(...)
+    #
+    # prb_loop.update_fun = problem_kwargs["update_fun"]
+    # prb_loop.update_order = problem_kwargs["update_order"]
+    # prb_loop.save_every = problem_kwargs["save_every"]
+    # prb_loop.tqdm_fun = problem_kwargs["tqdm_fun"]
+    # prb_loop.do_save = True
+    #
+    # prb_loop.relationHandle = relationClass.singleRelation2D()
+    # sphere_ptc = particleClass.ForceSphere2D(name="ForceSphere2D")
+    # sphere_ptc.X = sphere_geo0.get_nodes()
+    # sphere_ptc.phi = sphere_phi
+    # sphere_ptc.u = np.zeros_like(sphere_geo0.get_nodes())
+    # sphere_ptc.U = np.zeros_like(sphere_geo0.get_nodes())
+    # sphere_ptc.w = np.zeros(sphere_geo0.get_n_nodes())
+    # sphere_ptc.W = np.zeros(sphere_geo0.get_n_nodes())
+    # sphere_ptc.prb_MR = prb_MR
+    # prb_loop.add_obj(sphere_ptc)
+    # # spf.petscInfo(sphere_ptc.logger, "  All the particles have a unified %s=%f, " % ("spin", 0), )
+    # # spf.petscInfo(sphere_ptc.logger, "  Generate %d particles with random seed %s" % (self.un.size, self.seed), )
+    # # spf.petscInfo(sphere_ptc.logger, "  Generate method: random_sample. ")
+    #
+    # act1 = interactionClass.ForceSphere2D(name="ForceSphere2D")
+    # prb_loop.add_act(act1)
+    # ini_t, max_t, eval_dt = 0, 100, 1
+    # prb_loop.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
+    
+    return True
+
+
 if __name__ == '__main__':
-    main_fun()
+    main_fun_v2()

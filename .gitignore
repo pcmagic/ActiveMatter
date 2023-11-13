@@ -41,15 +41,17 @@ bck/*
 *_out.*
 *dbg/
 *dbg/*
+*/dbg*
 */try_*/
 try/*/
 *_bck*
-MR_ch13_wheeled_mobile_robots.pdf
-MR.pdf
+*.pdf
 collectiveFish/*/
 Parameter_settings
 .github/
 qodana.yaml
+*/Force_Spheres1030*
+ForceSphere/A000-Test_RK4*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

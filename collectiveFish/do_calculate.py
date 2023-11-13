@@ -301,7 +301,7 @@ def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
         cmap = sps.twilight_diverging()
         fig_name = "%s/avrW_%s.png" % (prb1.name, prb1.name)
         sps.save_fig_fun(fig_name, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi, plt_tmin=plt_tmin, plt_tmax=plt_tmax,
-                         resampling_fct=resampling_fct, cmap=cmap, vmin=vmin, vmax=vmax, npabs=False, tavr=tavr, )
+                         resampling_fct=resampling_fct, cmap=cmap, vmin=None, vmax=None, npabs=False, tavr=tavr, )
         # ----------------------------------
         markevery, linestyle = (0.3, "o-C1",)
         fig_name = "%s/orderR_%s.png" % (prb1.name, prb1.name)
