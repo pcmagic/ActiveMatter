@@ -207,6 +207,19 @@ class _baseRelation2D(_baseRelation):
         spf.petscInfo(self.father.logger, '  overlap_epsilon=%e' % self.overlap_epsilon)
         return True
 
+class nothingRelation2D(_baseRelation2D):
+    def update_relation(self, **kwargs):
+        pass
+        return True
+    
+    def update_neighbor(self, **kwargs):
+        pass
+        return True
+
+    def check_self(self, **kwargs):
+        pass
+        return True
+
 class singleRelation2D(_baseRelation2D):
     def update_relation(self, **kwargs):
         pass

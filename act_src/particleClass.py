@@ -546,10 +546,38 @@ class ackermann2D(particle2D):
         return True
 
 
-class ForceSphere2D(particle2D):
+class singleForceSphere2D(particle2D):
     def __init__(self, name="...", **kwargs):
         super().__init__(name, **kwargs)
         self._prb_MR = None
+    
+    @property
+    def prb_MR(self):
+        return self._prb_MR
+    
+    @prb_MR.setter
+    def prb_MR(self, prb_MR):
+        from src import stokes_flow as sf
+        err_msg = "wrong problem type of prb_MR, current: %s " % repr(prb_MR)
+        assert isinstance(prb_MR, sf.ForceSphere2DProblem), err_msg
+        self._prb_MR = prb_MR
+    
+    def check_self(self, **kwargs):
+        from src import stokes_flow as sf
+        
+        super().check_self(**kwargs)
+        err_msg = "wrong parameter value: %s "
+        assert self.dimension in (2,), err_msg % "dimension"
+        assert isinstance(self.father, problemClass.singleForceSphere2DProblem), err_msg % "father"
+        assert isinstance(self.prb_MR, sf.ForceSphere2DProblem), err_msg % "prb_MR"
+        return True
+
+
+class ForceSphere2D(singleForceSphere2D):
+    def __init__(self, name="...", **kwargs):
+        super().__init__(name, **kwargs)
+        self._prb_MR = None
+        self._r = np.nan  # particle radius
     
     @property
     def prb_MR(self):
@@ -586,6 +614,14 @@ class ForceSphere2D(particle2D):
     def W(self, W):
         self._W = np.array(W)
     
+    @property
+    def r(self):
+        return self._r
+    
+    @r.setter
+    def r(self, r):
+        self._r = r
+    
     def check_self(self, **kwargs):
         from src import stokes_flow as sf
         err_msg = "wrong parameter value: %s "
@@ -610,9 +646,32 @@ class ForceSphere2D(particle2D):
         # assert isinstance(self.phi, np.float64), err_msg % "phi"
         # assert np.isfinite(self.phi), err_msg % "phi"
         return True
-    
-    def update_position(self, X, **kwargs):
-        self.X = X
+
+
+class ForceSphere2D_matrix(ForceSphere2D):
+    def check_self(self, **kwargs):
+        from src import stokes_flow as sf
+        err_msg = "wrong parameter value: %s "
+        
+        assert self.index >= 0, err_msg % "index"
+        assert isinstance(self.father, problemClass._baseProblem), err_msg % "father"
+        assert np.isfinite(self.u).all(), err_msg % "u"
+        assert np.isfinite(self.X).all(), err_msg % "X"
+        assert np.isfinite(self.U).all(), err_msg % 'U'
+        assert np.isfinite(self.W).all(), err_msg % 'W'
+        
+        assert self.dimension in (2,), err_msg % "dimension"
+        assert isinstance(self.father, problemClass.ForceSphere2D_matrix), err_msg % "father"
+        # assert isinstance(self.prb_MR, sf.ForceSphere2DProblem), err_msg % "prb_MR"
+        # assert self.X.shape == (2,), err_msg % "X"
+        # assert self.U.shape == (2,), err_msg % "U"
+        # assert self.W.size == 1, err_msg % "W"
+        # for obji in self.neighbor_list:
+        #     assert isinstance(obji, particle2D), err_msg % "neighbor_list"
+        # assert np.isfinite(self.P1).all(), err_msg % "P1"
+        # assert self.P1.shape == (2,), err_msg % "P1"
+        # assert isinstance(self.phi, np.float64), err_msg % "phi"
+        # assert np.isfinite(self.phi), err_msg % "phi"
         return True
 
 

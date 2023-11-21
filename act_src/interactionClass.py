@@ -8,6 +8,7 @@ import abc
 
 import numpy as np
 from petsc4py import PETSc
+from time import time
 
 from act_src import baseClass
 from act_src import particleClass
@@ -15,6 +16,10 @@ from act_src import problemClass
 from act_src import relationClass
 from act_codeStore.support_class import *
 from act_codeStore import support_fun as spf
+from src import stokes_flow as sf
+from src import geo
+from src.myio import *
+from src import forceSphere2d as fs2
 
 
 # from act_codeStore.support_class import *
@@ -591,6 +596,7 @@ class AttractRepulsion2D_point(_baseAction2D):
 class Ackermann2D(_baseAction2D):
     def __init__(self, radian_tolerance=0, **kwargs):
         super().__init__(**kwargs)
+        self._obj_list = uniqueList(acceptType=particleClass.ackermann2D)  # contain objects
         self._radian_tolerance = radian_tolerance
     
     @property
@@ -716,16 +722,264 @@ class Ackermann_phaseLag2D(phaseLag2D, Ackermann2D):
 
 
 class ForceSphere2D(_baseAction2D):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._obj_list = uniqueList(acceptType=particleClass.ForceSphere2D)  # contain objects
+    
     def update_prepare(self):
         pass
     
     def update_action(self, F):
-        assert self.n_obj == 1
         assert self.dimension == 2
         
         obji = self.obj_list[0]
-        prb_MR = obji.prb_MR
+        prb_MR = obji.prb_MR  # type:sf.ForceSphere2DProblem
+        # prb_MR.set_velocity_petsc(F)
+        prb_MR.create_matrix_light()
+        prb_MR.solve_resistance(PETScSysPrint=False)
+        # F[:] = prb_MR.get_velocity_petsc()
+        pass
+        return True
+
+
+class ForceSphere2D_matrix_bck(_baseAction2D):
+    def __init__(self, name="...", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self._obj_list = uniqueList(acceptType=particleClass.ForceSphere2D_matrix)  # contain objects
+        self._prb_MR = None
+    
+    @property
+    def prb_MR(self):
+        return self._prb_MR
+    
+    # @prb_MR.setter
+    # def prb_MR(self, prb_MR):
+    #     from src import stokes_flow as sf
+    #     err_msg = "wrong problem type for mobility and resistance matrices calculation, current: %s " % repr(prb_MR)
+    #     assert isinstance(prb_MR, sf.ForceSphere2DProblem)
+    #     self._prb_MR = prb_MR
+    
+    def update_prepare(self):
+        assert self.dimension == 2
+        problem = self.father  # type:problemClass.ForceSphere2D_matrix
+        obj = problem.obj_list[0]  # type:particleClass.ForceSphere2D_matrix
+        sphere_R = obj.r
+        sphere_X = obj.X.reshape((-1, self.dimension))
+        sphere_phi = obj.phi
+        # dof = problem.dof
+        kwargs = problem.kwargs
+        fileHandle = kwargs['fileHandle']
+        #
+        sphere_geo0 = geo.sphere_particle_2d()
+        sphere_geo0.set_nodes(sphere_X, -1)
+        sphere_geo0.set_sphere_R(sphere_R)
+        sphere_geo0.set_velocity(np.zeros_like(sphere_X).flatten())
+        sphere_geo0.set_phi(sphere_phi)
+        #
+        sphere_obj0 = sf.ForceSphereObj()
+        sphere_obj0.set_data(f_geo=sphere_geo0, u_geo=sphere_geo0, name=fileHandle)
+        #
+        prb_MR = sf.ForceSphere2DProblem(**kwargs)
+        prb_MR.add_obj(sphere_obj0)
         prb_MR.create_matrix()
         prb_MR.solve_resistance()
-        F[:] = prb_MR.get_velocity()
+        PETSc.Sys.Print(' ')
+    
+    def update_action(self, F):
+        assert self.dimension == 2
+        problem = self.father  # type:problemClass.ForceSphere2D_matrix
+        ts_f = problem.ts_f
+        ts_y = problem.ts_y
+        # print(ts_f.getSize())
+        print(ts_y.getArray())
+        
+        assert 1 == 2
+        
+        obji = self.obj_list[0]
+        prb_MR = obji.prb_MR  # type:sf.ForceSphere2DProblem
+        # prb_MR.set_velocity_petsc(F)
+        prb_MR.create_matrix_light()
+        prb_MR.solve_resistance(PETScSysPrint=False)
+        # F[:] = prb_MR.get_velocity_petsc()
+        pass
+        return True
+
+
+class ForceSphere2D_matrix(_baseAction2D):
+    def __init__(self, name="...", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self._obj_list = uniqueList(acceptType=particleClass.ForceSphere2D_matrix)  # contain objects
+        self._ksp = PETSc.KSP()
+        self._force_petsc = None  # F = R U, for ksp solver
+        self._Minf_petsc = None  # R matrix, lubrication part
+        self._Rlub_petsc = None  # R matrix, lubrication part
+        self._Rtol_petsc = None  # full modified R matrix, Rtol = I + Minf^-1 * Rlub
+        self._Fmdf_petsc = None  # modified force vector, Fmdf = Minf * F
+        self._velocity = np.zeros([0])  # velocity information
+        self._spin = np.zeros([0])  # spin information
+        self._re_fmdf = np.zeros([0])  # resolved information of modified force
+    
+    @property
+    def ksp(self):
+        return self._ksp
+    
+    @property
+    def Minf_petsc(self):
+        return self._Minf_petsc
+    
+    @property
+    def Rlub_petsc(self):
+        return self._Rlub_petsc
+    
+    @property
+    def Rtol_petsc(self):
+        return self._Rtol_petsc
+    
+    @property
+    def Fmdf_petsc(self):
+        return self._Fmdf_petsc
+    
+    @property
+    def force_petsc(self):
+        return self._force_petsc
+    
+    @property
+    # F = R U and U = ts_f (U for ksp solver, and ts_f for ts solver)
+    def velocity_petsc(self):
+        return self.father.ts_f
+    
+    @property
+    def velocity(self):
+        return self._velocity
+    
+    @property
+    def spin(self):
+        return self._spin
+    
+    def ksp_prepare(self):
+        # t0 = time()
+        problem = self.father
+        kwargs = problem.kwargs
+        solve_method = kwargs['solve_method']
+        precondition_method = kwargs['precondition_method']
+        # self.velocity_petsc[:] = ini_guess[:]
+        # self.velocity_petsc.assemble()
+        
+        ksp = self.ksp
+        ksp.create(comm=PETSc.COMM_WORLD)
+        ksp.setType(solve_method)
+        ksp.getPC().setType(precondition_method)
+        # OptDB = PETSc.Options()
+        ksp.setFromOptions()
+        ksp.setGMRESRestart(ksp.getTolerances()[-1])
+        ksp.setInitialGuessNonzero(True)
+        ksp.setOperators(self.Rtol_petsc)
+        ksp.setUp()
+        return True
+        
+        #
+        # self._solve_velocity(ksp)
+        # self._residualNorm = self._resolve_fmdf(ksp)
+        # ksp.destroy()
+        #
+        # if PETScSysPrint:
+        #     t1 = time()
+        #     PETSc.Sys.Print('  %s: solve matrix equation use: %fs, with residual norm %e' %
+        #                     (str(self) + 'solve_resistance', (t1 - t0), self._residualNorm))
+        # return self._residualNorm
+    
+    def create_matrix(self):
+        problem = self.father  # type:problemClass.ForceSphere2D_matrix
+        kwargs = problem.kwargs
+        dmda = problem.dmda
+        ts = problem.ts
+        ts_f = problem.ts_f
+        ts_y = problem.ts_y
+        obj = problem.obj_list[0]
+        sphere_R = obj.r
+        diag_err = kwargs['diag_err']  # Avoiding errors introduced by nan values. (避免nan值引入的误差)
+        rs2 = kwargs['rs2']
+        sdis = kwargs['sdis']
+        length = kwargs['length']
+        width = kwargs['width']
+        mu = kwargs['mu']
+        
+        Minf_petsc = self.Minf_petsc
+        Rlub_petsc = self.Rlub_petsc
+        Rtol_petsc = self.Rtol_petsc
+        fs2.M_R_petsc_simp(Minf_petsc, Rlub_petsc, Rtol_petsc, dmda,
+                           sphere_R, ts_y, sdis, length, width,
+                           mu=mu, diag_err=diag_err)
+    
+    def solve_velocity(self):
+        problem = self.father  # type:problemClass.ForceSphere2D_matrix
+        kwargs = problem.kwargs
+        mu = kwargs['mu']
+        ksp = self.ksp
+        frac = 1 / (np.pi * mu)  # 前置系数
+        
+        # self.Minf_petsc.view()
+        self.Minf_petsc.mult(self.force_petsc, self.Fmdf_petsc)
+        self.Fmdf_petsc.scale(frac)
+        ksp.solve(self.Fmdf_petsc, self.velocity_petsc)
+        
+        # the following codes are commanded for speedup.
+        # # reorder force from petsc index to normal index, and separate to each object.
+        # t_velocity = self.vec_scatter(self._velocity_petsc, destroy=False)
+        # tmp_velocity = []
+        # tmp_spin = []
+        # for obj0 in self.get_obj_list():  # type: geo.sphere_particle_2d
+        #     ugeo = obj0.get_u_geo()
+        #     _, u_glbIdx_all = ugeo.get_glbIdx()
+        #     obj0.set_velocity(t_velocity[u_glbIdx_all[:ugeo.get_dof() * ugeo.get_n_nodes()]])
+        #     obj0.set_spin(t_velocity[u_glbIdx_all[ugeo.get_dof() * ugeo.get_n_nodes():]])
+        #     tmp_velocity.append(obj0.get_velocity())
+        #     tmp_spin.append(obj0.get_spin())
+        # self._velocity = np.hstack(tmp_velocity)
+        # self._spin = np.hstack(tmp_spin)
+        return True
+    
+    def update_prepare(self):
+        assert self.dimension == 2
+        problem = self.father  # type:problemClass.ForceSphere2D_matrix
+        kwargs = problem.kwargs
+        dmda = problem.dmda
+        # ts = problem.ts
+        # ts_f = problem.ts_f
+        # ts_y = problem.ts_y
+        obj = problem.obj_list[0]
+        fileHandle = kwargs['fileHandle']
+        
+        self._force_petsc = dmda.createGlobalVector()
+        self._Fmdf_petsc = dmda.createGlobalVector()
+        self._Minf_petsc = dmda.createMatrix()
+        self._Rlub_petsc = dmda.createMatrix()
+        self._Rtol_petsc = dmda.createMatrix()
+        for tpetsc_obj, type in zip((self.force_petsc, self.Fmdf_petsc, self.Minf_petsc, self.Rlub_petsc, self.Rtol_petsc),
+                                    ('standard', 'standard', 'dense', 'dense', 'dense')):
+            tpetsc_obj.setType(type)
+            tpetsc_obj.setFromOptions()
+            tpetsc_obj.setUp()
+            # print(tpetsc_obj.getSizes())
+        
+        self.ksp_prepare()
+        return True
+    
+    def update_action(self, F):
+        assert self.dimension == 2
+        problem = self.father  # type:problemClass.ForceSphere2D_matrix
+        kwargs = problem.kwargs
+        For = kwargs['For']
+        Tor = kwargs['Tor']
+        phi = problem.Phiall
+        dmda = problem.dmda
+        # print(ts_f.getSize())
+        # print(ts_y.getArray())
+        
+        # calculate force of ksp solver
+        fs2.F_petsc(dmda, F, For, Tor, phi)
+        self.create_matrix()
+        self.solve_velocity()
+        # F[:] = prb_MR.get_velocity_petsc()
+        pass
         return True

@@ -33,6 +33,7 @@ class _baseProblem(baseClass.baseObj):
         super().__init__(name, **kwargs)
         # self._type = 'baseProblem'
         self._dimension = -1  # -1 for undefined, 2 for 2D, 3 for 3D
+        self._dof = -1  # -1 for undefined, 3 for 2D (x1, x2, phi), 6 for 3D (3 location + 3 orientation)
         self._rot_noise = 0  # rotational noise
         self._trs_noise = 0  # translational noise
         self._obj_list = uniqueList(acceptType=particleClass._baseParticle)  # contain objects
@@ -54,6 +55,7 @@ class _baseProblem(baseClass.baseObj):
         self.ts = PETSc.TS().create(comm=self.comm)  # time-dependent PDEs.
         self.ts_y = None
         self.ts_f = None
+        self._dmda = None
         
         # clear dir
         fileHandle = self.name
@@ -74,11 +76,10 @@ class _baseProblem(baseClass.baseObj):
             sys.stderr = spf.MyLogger(self.logger, logging.ERROR)
         time.sleep(0.1)
         #
+        spf.petscInfo(self.logger, "Collective motion solver, Zhang Ji, 2021. ")
         if tprint:
             spf.petscInfo(self.logger, "remove folder %s" % fileHandle)
         spf.petscInfo(self.logger, "make folder %s" % fileHandle)
-        spf.petscInfo(self.logger, " ")
-        spf.petscInfo(self.logger, "Collective motion solve, Zhang Ji, 2021. ")
         
         # parameters for temporal evaluation.
         self._save_every = 1
@@ -102,6 +103,10 @@ class _baseProblem(baseClass.baseObj):
     @property
     def dimension(self):
         return self._dimension
+    
+    @property
+    def dof(self):
+        return self._dof
     
     @property
     def rot_noise(self):
@@ -317,6 +322,10 @@ class _baseProblem(baseClass.baseObj):
         speed = (np.sum([np.linalg.norm(obji.U) for obji in self.obj_list], axis=0) / self.n_obj)
         return speed
     
+    @property
+    def dmda(self):
+        return self._dmda
+    
     def _check_add_obj(self, obj):
         err_msg = "wrong object type"
         assert isinstance(obj, particleClass._baseParticle), err_msg
@@ -354,7 +363,6 @@ class _baseProblem(baseClass.baseObj):
     
     def update_prepare(self, showInfo=True):
         # location
-        self._obj_list = np.array(self.obj_list)
         self.Xall = np.vstack([objj.X for objj in self.obj_list])
         # self.Uall = np.vstack([objj.U for objj in self.obj_list])
         # self.Wall = np.vstack([objj.W for objj in self.obj_list])
@@ -430,6 +438,12 @@ class _baseProblem(baseClass.baseObj):
         ts.setUp()
         return ts
     
+    def set_dmda(self):
+        self._dmda = PETSc.DMDA().create(sizes=(self.n_obj,), dof=self.dof, stencil_width=0, comm=PETSc.COMM_WORLD)
+        self._dmda.setFromOptions()
+        self._dmda.setUp()
+        return True
+    
     def update_self_prepare(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
         self._update_start_time = datetime.now()
         self.t0 = t0
@@ -437,14 +451,16 @@ class _baseProblem(baseClass.baseObj):
         self.eval_dt = eval_dt
         self.max_it = max_it
         self.percentage = 0
+        self._obj_list = np.array(self.obj_list)
+        self.set_dmda()
+        # print(self.dmda.getRanges())
         self.update_prepare()
+        self.set_ts_y()
+        self.set_ts_f()
+        self.ts_setUp(self.ts_y, self.ts_f)
         
         # do simulation
         # self._do_store_data(ts, 0, 0, y)
-        y0 = self._get_y0()
-        self.ts_y = PETSc.Vec().createWithArray(y0, comm=self.comm)
-        self.ts_f = self.ts_y.duplicate()
-        self.ts_setUp(self.ts_y, self.ts_f)
         return True
     
     # def update_onestep(self):
@@ -496,10 +512,11 @@ class _baseProblem(baseClass.baseObj):
         return True
     
     def update_self(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001, pick_prepare=True):
+        self.update_self_prepare(t1, t0, max_it, eval_dt)
+        
         if self.rank0:
             self._tqdm = self.tqdm_fun(total=100, desc="  %s" % self.name)
         
-        self.update_self_prepare(t1, t0, max_it, eval_dt)
         self.ts.solve(self.ts_y)
         self.update_self_finish(pick_prepare)
         return True
@@ -537,6 +554,16 @@ class _baseProblem(baseClass.baseObj):
     @abc.abstractmethod
     def _get_y0(self, **kwargs):
         return
+    
+    def set_ts_y(self, **kwargs):
+        self.ts_y = self.dmda.createGlobalVector()
+        self.ts_y[:] = self._get_y0()
+        self.ts_y.assemble()
+        return True
+    
+    def set_ts_f(self, **kwargs):
+        self.ts_f = self.ts_y.duplicate()
+        return True
     
     @abc.abstractmethod
     def _rhsfunction(self, ts, t, Y, F):
@@ -609,6 +636,10 @@ class _baseProblem(baseClass.baseObj):
         if self.ts_f is not None:
             self.ts_f.destroy()
             self.ts_f = None
+        #
+        if self.dmda is not None:
+            self._dmda.destroy()
+            self._dmda = None
         return True
     
     def destroy_self(self, **kwargs):
@@ -724,6 +755,7 @@ class _base2DProblem(_baseProblem):
         super().__init__(name, **kwargs)
         self._Phiall = np.nan
         self._dimension = 2  # 2 for 2D
+        self._dof = 3  # 3 for 2D (x1, x2, phi)
         self._action_list = uniqueList(acceptType=interactionClass._baseAction2D)  # contain rotational interactions
     
     @property
@@ -944,6 +976,7 @@ class actPeriodic2DProblem(periodic2DProblem, behavior2DProblem):
 class Ackermann2DProblem(behavior2DProblem):
     def __init__(self, name="...", **kwargs):
         super().__init__(name, **kwargs)
+        self._dof = 4  # 4 for 2D Ackermann2DProblem (x1, x2, phi, phi_s)
         self._W_steer_all = np.nan  # rotational velocity of steer at current time
         self._Phi_steer_all = np.nan
     
@@ -982,7 +1015,7 @@ class Ackermann2DProblem(behavior2DProblem):
         for obji, Xi, phii, phi_steeri in zip(self.obj_list, self.Xall, self.Phiall, self.Phi_steer_all):
             obji.update_position(Xi, phii, phi_steer=phi_steeri)
         self.Phi_steer_all = np.hstack([objj.phi_steer for objj in self.obj_list])
-
+        
         # update Y as phi_steer is wrapped into (-phi_steer_limit, +phi_steer_limit).
         # # version 1
         # Y = ts.getSolution()
@@ -1069,27 +1102,109 @@ class Ackermann2DProblem(behavior2DProblem):
         return True
 
 
-class ForceSphere2DProblem(_base2DProblem):
-    def _nothing(self):
-        pass
-    
+class singleForceSphere2DProblem(_base2DProblem):
     def _get_y0(self, **kwargs):
-        y0 = self.Xall.ravel()
+        obji = self.obj_list[0]
+        y0 = np.hstack([(obji.X[2 * i0], obji.X[2 * i0 + 1], obji.phi[i0]) for i0 in range(self.n_sphere)])
         return y0
     
     def _rhsfunction(self, ts, t, Y, F):
         # structure:
-        #   Y = [X_all]
-        #   F = [U_all]
-        X_all = self.Y2Xphi(Y)
+        #   Y = [(X_i, phi_i)]
+        #   F = [(U_i, W_i)]
+        X_all, phi_all = self.Y2Xphi(Y)
         self.Xall = X_all.reshape((-1, self.dimension))
+        self.Phiall = phi_all
+        self.update_position()
+        self.update_UWall(F)
+        tF = self.vec_scatter(F)
+        #
+        self.Uall = tF[: self.dimension * self.n_obj].reshape((-1, self.dimension))
+        self.Wall = tF[self.dimension * self.n_obj:]
+        self.update_velocity()
+        print(ts.getTime())
+        print(self.Xall)
+        print(self.Uall)
+        print(np.vstack((np.cos(self.Phiall), np.sin(self.Phiall))).T)
+        print(self.Wall)
+        return True
+    
+    def update_position(self, **kwargs):
+        pass
+        return True
+    
+    def update_velocity(self, **kwargs):
+        pass
+        return True
+    
+    def Y2Xphi(self, Y):
+        y = self.vec_scatter(Y)
+        X_all = y[: self.dimension * self.n_obj]
+        phi_all = y[self.dimension * self.n_obj:]
+        return X_all, phi_all
+    
+    def print_info(self):
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+
+
+class ForceSphere2DProblem(singleForceSphere2DProblem):
+    def __init__(self, name="...", **kwargs):
+        super().__init__(name, **kwargs)
+        self._n_sphere = -1  # the number of spheres.
+    
+    @property
+    def n_sphere(self):
+        return self._n_sphere
+    
+    def _check_add_obj(self, obj):
+        super()._check_add_obj(obj)
+        assert self.n_obj == 0
+        err_msg = "wrong object type"
+        assert isinstance(obj, particleClass.ForceSphere2D), err_msg
+        self._n_sphere = obj.W.size
+        return True
+    
+    def set_dmda(self):
+        self._dmda = PETSc.DMDA().create(sizes=(self.n_sphere,), dof=self.dof, stencil_width=0, comm=PETSc.COMM_WORLD)
+        self._dmda.setFromOptions()
+        self._dmda.setUp()
+        return True
+    
+    # def update_UWall(self, F):
+    #     pass
+    #     return True
+    #
+    # def set_ts_f(self, **kwargs):
+    #     obji = self.obj_list[0]
+    #     prb_MR = obji.prb_MR
+    #     self.ts_f = prb_MR.get_velocity_petsc()
+    #     return True
+    
+    def _rhsfunction(self, ts, t, Y, F):
+        # structure:
+        #   Y = [X_all, phi_all]
+        #   F = [U_all, W_all]
+        n_sphere = self.n_sphere
+        X_all, phi_all = self.Y2Xphi(Y)
+        self.Xall = X_all
+        self.Phiall = phi_all
         self.update_position()
         self.update_UWall(F)
         tF = self.vec_scatter(F)
         # F.destroy()
-        self.Uall = tF[: self.dimension * self.n_obj].reshape((-1, self.dimension))
-        self.Wall = tF[self.dimension * self.n_obj:]
+        self.Uall = np.array([tF[0::3], tF[1::3]]).T
+        self.Wall = tF[2::3]
         self.update_velocity()
+        print(ts.getTime())
+        print(self.Xall)
+        print(self.Uall)
+        print(np.vstack((np.cos(self.Phiall), np.sin(self.Phiall))).T)
+        print(self.Wall)
+        assert 1 == 2
         # F.assemble()
         # spf.petscInfo(self.logger, ' ')
         # spf.petscInfo(self.logger, 'dbg', t)
@@ -1103,14 +1218,21 @@ class ForceSphere2DProblem(_base2DProblem):
     
     def Y2Xphi(self, Y):
         y = self.vec_scatter(Y)
-        X_all = y
-        return X_all
+        X_all = np.array([y[0::3], y[1::3]]).T
+        phi_all = y[2::3]
+        return X_all, phi_all
     
     def update_position(self, **kwargs):
         obji: particleClass.ForceSphere2D
         assert self.n_obj == 1
         obji = self.obj_list[0]
-        obji.update_position(self.Xall)
+        obji.update_position(self.Xall, self.Phiall)
+        return True
+    
+    def update_velocity(self, **kwargs):
+        obji: particleClass.ForceSphere2D
+        obji = self.obj_list[0]
+        obji.update_velocity(self.Uall, self.Wall)
         return True
     
     def print_info(self):
@@ -1119,3 +1241,8 @@ class ForceSphere2DProblem(_base2DProblem):
         print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
         print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
         print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+
+
+class ForceSphere2D_matrix(ForceSphere2DProblem):
+    def nothing(self):
+        pass
