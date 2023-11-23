@@ -72,8 +72,7 @@ class baseObj:
     def print_info(self):
         # OptDB = PETSc.Options()
         spf.petscInfo(self.father.logger, " ")
-        spf.petscInfo(self.father.logger, "Information about %s (%s): "
-                      % (str(self), self.type,), )
+        spf.petscInfo(self.father.logger, "Information about %s (%s): " % (str(self), self.type,), )
         return True
     
     @staticmethod

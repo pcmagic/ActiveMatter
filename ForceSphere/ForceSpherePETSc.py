@@ -87,53 +87,42 @@ def get_problem_kwargs(**main_kwargs):
     # todo: modify
     problem_kwargs = get_solver_kwargs()
     OptDB = PETSc.Options()
-    fileHandle = OptDB.getString('f', 'dbg_ForceSpherePETSc')
-    OptDB.setValue('f', fileHandle)
-    problem_kwargs['fileHandle'] = fileHandle
+    #
     kT1 = OptDB.getReal('kT1', 4.141947e-06)
-    # 主体部分的计算
-    kT1 = 4.141947e-06  # 室温(300K)时的热涨落的能量(g um2/s2)
-    kT2 = 5.522602e-06  # 400K时的热涨落的能量(g um2/s2)
-    kT = 300 * 1.380649e-08  # 300K时的热涨落的能量(g um2/s2)
+    # kT1 = 4.1419470e-6;
+    # kT2 = 5.5226020e-6;
+    # kT = 300*1.380649e-8;
     # mu = 1.0e-6  # Fluid viscosity(血浆的粘度)(g/um/s)
     mu = 1  # Fluid viscosity(血浆的粘度)(g/um/s)
-    frac = 1 / (np.pi * mu)  # 前置系数
-    a = 1.0  # 所有球体的半径
-    dt0 = 6 * np.pi * mu * a ** 3 / kT  # 时间单位
+    radius = 1.0  # 所有球体的半径
     # 数据处理参数
     # rs2 = 6.0  # todo: varify, rs2 \in (6, 12, and other values).
     rs2 = 12  # todo: varify, rs2 \in (6, 12, and other values).
     sdis = 1.0e-10  # 最小表面间距
-    dt = 2.50e-5 * dt0  # 时间步长
-    time_h = 4 * dt  # 龙格库塔法时间步长
     For = 0.1  # 给定活性粒子的推进力
-    Tor = 0.0 * kT  # 给定活性粒子的力矩
-    N_dat = 200.0  # 数据输出（4的倍数）
-    N_fig = 1000.0  # 画图（4的倍数）
-    N_save = 20000.0  # 保存图片（N_fig的倍数）
+    Tor = 10  # 给定活性粒子的力矩
     
     # 生成随机球体
     length = 500.0  # 图像长   改
     width = 500.0  # 图像宽   改
-    
-    radius = a  # spherical radius
-    diameter = 2 * radius  # 散斑直径（单位：像素）
     density = 0.9  # 密排度（区间：0-1，图像上的散斑密度）  改
     variation = 0.9  # 偏移度（区间：0-1，图像上的散斑随机排布程度，0时即为圆点整列）
-    # 可选设置
-    eccentricity = 0.0  # 椭圆的偏心率（区间：[0,1]，为0时即为圆点）
     
-    rng = np.random.seed(5)  # 生成一组随机数种子，使之后Section中产生的散斑伪随机, 这里将种子设置为0.可以调整
+    # rng = np.random.seed(5)  # 生成一组随机数种子，使之后Section中产生的散斑伪随机, 这里将种子设置为0.可以调整
     diag_err = 1e-16  # Avoiding errors introduced by nan values. (避免nan值引入的误差)
     
-    problem_kwargs['kT1'] = kT1
+    # problem_kwargs['kT1'] = kT1
+    problem_kwargs['mu'] = mu
+    problem_kwargs['radius'] = radius
     problem_kwargs['rs2'] = rs2
     problem_kwargs['sdis'] = sdis
-    problem_kwargs['length'] = length
-    problem_kwargs['width'] = width
-    problem_kwargs['mu'] = mu
     problem_kwargs['For'] = For
     problem_kwargs['Tor'] = Tor
+    #
+    problem_kwargs['length'] = length
+    problem_kwargs['width'] = width
+    problem_kwargs['density'] = density
+    problem_kwargs['variation'] = variation
     problem_kwargs['diag_err'] = diag_err
     problem_kwargs['matrix_method'] = 'forceSphere2d'
     # todo....
@@ -249,7 +238,7 @@ def partical_generator_random(**problem_kwargs):
     return sphere_R, sphere_X, sphere_phi
 
 
-def partical_generator_LBP(**problem_kwargs):
+def partical_generator_dbg(**problem_kwargs):
     # test code from LBP, A000-Test_RK4 case (Liu Baopi version).
     sphere_X = np.array(((2.7, 2.9),
                          (0.1, 2.1),
@@ -258,6 +247,36 @@ def partical_generator_LBP(**problem_kwargs):
     sphere_R = np.ones(sphere_X.shape[0])
     
     sphere_phi = np.zeros_like(sphere_R)
+    return sphere_R, sphere_X, sphere_phi
+
+
+def partical_generator_LBP(**problem_kwargs):
+    # 生成随机球体
+    radius = problem_kwargs['radius']  # 所有球体的半径
+    length = problem_kwargs['length']  # 图像长   改
+    width = problem_kwargs['width']  # 图像宽   改
+    density = problem_kwargs['density']  # 密排度（区间：0-1，图像上的散斑密度）  改
+    variation = problem_kwargs['variation']  # 偏移度（区间：0-1，图像上的散斑随机排布程度，0时即为圆点整列）
+    
+    diameter = 2 * radius  # 散斑直径（单位：像素）
+    
+    # 生成随机散斑在图像上的位置
+    spacing = diameter / density ** (1 / 2)  # 2D散斑个数
+    colu = int(length // spacing)  # x轴
+    cols = int(width // spacing)  # y轴
+    xmin = 0.5 * (length - colu * spacing)  # x轴散散斑边界位置
+    ymin = 0.5 * (width - cols * spacing)  # y轴散斑边界位置
+    x = np.tile((xmin + (np.arange(colu) + 1) * spacing), (cols, 1)).T
+    y = np.tile((ymin + (np.arange(cols) + 1) * spacing), (colu, 1))
+    # 增加随机移动量
+    limit = 0.5 * variation * spacing
+    x = x + limit * (np.random.random((cols, colu)) - 2)
+    y = y + limit * (np.random.random((cols, colu)) - 2)
+    NS = x.size  # 总的粒子数
+    #
+    sphere_X = np.array([x.ravel(), y.ravel()]).T
+    sphere_R = radius * np.ones(NS)  # spherical radius
+    sphere_phi = spf.warpToPi(2 * np.random.rand(NS) * np.pi)  # z 方向（球心处）
     return sphere_R, sphere_X, sphere_phi
 
 
@@ -270,7 +289,7 @@ def main_fun(**main_kwargs):
     # test damo
     # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
     # sphere_R, sphere_X, D3 = partical_generator_random(**problem_kwargs)
-    sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
+    sphere_R, sphere_X, sphere_phi = partical_generator_dbg(**problem_kwargs)
     dof = sphere_X.shape[1]
     
     sphere_geo0 = sphere_particle_2d()
@@ -338,7 +357,7 @@ def main_fun_v2(**main_kwargs):
     # test damo
     # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
     # sphere_R, sphere_X, D3 = partical_generator_random(**problem_kwargs)
-    sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
+    sphere_R, sphere_X, sphere_phi = partical_generator_dbg(**problem_kwargs)
     dof = sphere_X.shape[1]
     
     sphere_geo0 = sphere_particle_2d()
@@ -404,7 +423,7 @@ def main_fun_v3(**main_kwargs):
     # test damo
     # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
     # sphere_R, sphere_X, D3 = partical_generator_random(**problem_kwargs)
-    sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
+    sphere_R, sphere_X, sphere_phi = partical_generator_dbg(**problem_kwargs)
     dof = sphere_X.shape[1]
     
     sphere_geo0 = sphere_particle_2d()
@@ -463,20 +482,25 @@ def main_fun_v4(**main_kwargs):
     print_case_info(**problem_kwargs)
     fileHandle = problem_kwargs['fileHandle']
     problem_kwargs['matrix_method'] = 'forceSphere2d_simp'
-    problem_kwargs['length'] = 3
-    problem_kwargs['width'] = 3
+    problem_kwargs['length'] = 10
+    problem_kwargs['width'] = 10
     problem_kwargs['sdis'] = 1.0e-4  # 最小表面间距
-    problem_kwargs['update_fun'] = '4'
+    # problem_kwargs['update_fun'] = '4'
+    # problem_kwargs['update_order'] = (0, 0)
+    problem_kwargs['update_fun'] = '1fe'
     problem_kwargs['update_order'] = (0, 0)
+    # problem_kwargs['update_fun'] = '5bs'
+    # problem_kwargs['update_order'] = (1e-9, 1e-12)
     
     # test damo
     # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
     # sphere_R, sphere_X, D3 = partical_generator_random(**problem_kwargs)
-    sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
+    sphere_R, sphere_X, sphere_phi = partical_generator_dbg(**problem_kwargs)
+    # sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
     n_sphere, dof = sphere_X.shape
     
     # loop
-    prb_loop = problemClass.ForceSphere2D_matrix(name=fileHandle, **problem_kwargs)
+    prb_loop = problemClass.ForceSphere2D_matrixPro(name=fileHandle, **problem_kwargs)
     spf.petscInfo(prb_loop.logger, "#" * 72)
     # spf.petscInfo(prb_loop.logger, "Generate Problem. ")
     
@@ -486,8 +510,8 @@ def main_fun_v4(**main_kwargs):
     prb_loop.tqdm_fun = problem_kwargs["tqdm_fun"]
     prb_loop.do_save = True
     
-    prb_loop.relationHandle = relationClass.nothingRelation2D()
-    sphere_ptc = particleClass.ForceSphere2D_matrix(name="ForceSphere2D")
+    prb_loop.relationHandle = relationClass.nothingRelation2D(name=fileHandle)
+    sphere_ptc = particleClass.ForceSphere2D_matrixObj(name=fileHandle)
     sphere_ptc.X = sphere_X
     sphere_ptc.phi = sphere_phi
     sphere_ptc.r = sphere_R
@@ -501,7 +525,7 @@ def main_fun_v4(**main_kwargs):
     # spf.petscInfo(sphere_ptc.logger, "  Generate %d particles with random seed %s" % (self.un.size, self.seed), )
     # spf.petscInfo(sphere_ptc.logger, "  Generate method: random_sample. ")
     
-    act1 = interactionClass.ForceSphere2D_matrix(name="ForceSphere2D")
+    act1 = interactionClass.ForceSphere2D_matrixAct(name=fileHandle)
     prb_loop.add_act(act1)
     ini_t, max_t, eval_dt = 0, 10, 1
     spf.petscInfo(prb_loop.logger, "Generate Problem finish. ")

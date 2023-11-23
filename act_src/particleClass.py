@@ -648,7 +648,12 @@ class ForceSphere2D(singleForceSphere2D):
         return True
 
 
-class ForceSphere2D_matrix(ForceSphere2D):
+class ForceSphere2D_matrixObj(ForceSphere2D):
+    # def __init__(self, name="...", **kwargs):
+    #     super().__init__(name, **kwargs)
+    #     self._prb_MR = None
+    #     self._r = np.nan  # particle radius
+    
     def check_self(self, **kwargs):
         from src import stokes_flow as sf
         err_msg = "wrong parameter value: %s "
@@ -661,7 +666,7 @@ class ForceSphere2D_matrix(ForceSphere2D):
         assert np.isfinite(self.W).all(), err_msg % 'W'
         
         assert self.dimension in (2,), err_msg % "dimension"
-        assert isinstance(self.father, problemClass.ForceSphere2D_matrix), err_msg % "father"
+        assert isinstance(self.father, problemClass.ForceSphere2D_matrixPro), err_msg % "father"
         # assert isinstance(self.prb_MR, sf.ForceSphere2DProblem), err_msg % "prb_MR"
         # assert self.X.shape == (2,), err_msg % "X"
         # assert self.U.shape == (2,), err_msg % "U"

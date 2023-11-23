@@ -455,8 +455,7 @@ class _baseProblem(baseClass.baseObj):
         self.set_dmda()
         # print(self.dmda.getRanges())
         self.update_prepare()
-        self.set_ts_y()
-        self.set_ts_f()
+        self.set_ts_vec()
         self.ts_setUp(self.ts_y, self.ts_f)
         
         # do simulation
@@ -555,13 +554,10 @@ class _baseProblem(baseClass.baseObj):
     def _get_y0(self, **kwargs):
         return
     
-    def set_ts_y(self, **kwargs):
+    def set_ts_vec(self, **kwargs):
         self.ts_y = self.dmda.createGlobalVector()
         self.ts_y[:] = self._get_y0()
         self.ts_y.assemble()
-        return True
-    
-    def set_ts_f(self, **kwargs):
         self.ts_f = self.ts_y.duplicate()
         return True
     
@@ -736,7 +732,8 @@ class _baseProblem(baseClass.baseObj):
         spf.petscInfo(self.logger, "Information about %s (%s): " % (str(self), self.type,), )
         spf.petscInfo(self.logger, "  This is a %d dimensional problem, contain %d objects. " % (self.dimension, self.n_obj), )
         spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" % (self.update_fun, self.update_order, self.max_it), )
-        spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f" % (self.t0, self.t1, self.eval_dt))
+        spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f, save_every=%d, seed=%d" %
+                      (self.t0, self.t1, self.eval_dt, self.save_every, self.kwargs['seed']))
         spf.petscInfo(self.logger, "  save log file to %s " % self.log_name)
         spf.petscInfo(self.logger, "  save pickle file to %s " % self.pickle_name)
         self.print_self_info()
@@ -1155,10 +1152,15 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
     def __init__(self, name="...", **kwargs):
         super().__init__(name, **kwargs)
         self._n_sphere = -1  # the number of spheres.
-    
+        self._sphere_R = None
+
     @property
     def n_sphere(self):
         return self._n_sphere
+    
+    @property
+    def sphere_R(self):
+        return self._sphere_R
     
     def _check_add_obj(self, obj):
         super()._check_add_obj(obj)
@@ -1173,7 +1175,16 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         self._dmda.setFromOptions()
         self._dmda.setUp()
         return True
-    
+
+    def set_ts_vec(self, **kwargs):
+        super().set_ts_vec(**kwargs)
+        self._sphere_R = PETSc.Vec().create(comm=PETSc.COMM_WORLD)
+        self.sphere_R.setSizes(self.dmda.getSizes()[0])
+        self.sphere_R.setFromOptions()
+        self.sphere_R.setUp()
+        self.sphere_R[:] = self.obj_list[0].r
+        self.sphere_R.assemble()
+        return True
     # def update_UWall(self, F):
     #     pass
     #     return True
@@ -1199,12 +1210,12 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         self.Uall = np.array([tF[0::3], tF[1::3]]).T
         self.Wall = tF[2::3]
         self.update_velocity()
-        print(ts.getTime())
-        print(self.Xall)
-        print(self.Uall)
-        print(np.vstack((np.cos(self.Phiall), np.sin(self.Phiall))).T)
-        print(self.Wall)
-        assert 1 == 2
+        spf.mpiprint(ts.getTime())
+        spf.mpiprint(self.Xall)
+        # print(self.Uall)
+        # print(np.vstack((np.cos(self.Phiall), np.sin(self.Phiall))).T)
+        # print(self.Wall)
+        # assert 1 == 2
         # F.assemble()
         # spf.petscInfo(self.logger, ' ')
         # spf.petscInfo(self.logger, 'dbg', t)
@@ -1224,7 +1235,7 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
     
     def update_position(self, **kwargs):
         obji: particleClass.ForceSphere2D
-        assert self.n_obj == 1
+        # assert self.n_obj == 1
         obji = self.obj_list[0]
         obji.update_position(self.Xall, self.Phiall)
         return True
@@ -1235,14 +1246,32 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         obji.update_velocity(self.Uall, self.Wall)
         return True
     
+    def print_self_info(self):
+        spf.petscInfo(self.logger, "  fluid viscosity: %f, force strength: %f, torque strength: %f" %
+                      (self.kwargs['mu'], self.kwargs['For'], self.kwargs['Tor'],), )
+        spf.petscInfo(self.logger, "  sphere radius: %f, near filed range: %f, minimal surface distance: %e, diag_err: %e" %
+                      (self.kwargs['radius'], self.kwargs['rs2'], self.kwargs['sdis'], self.kwargs['diag_err'],), )
+        spf.petscInfo(self.logger, "  domain size: %f × %f, sphere density: %f, random variation: %f" %
+                      (self.kwargs['length'], self.kwargs['width'], self.kwargs['density'], self.kwargs['variation'],), )
+    
     def print_info(self):
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        # OptDB = PETSc.Options()
+        spf.petscInfo(self.logger, " ")
+        spf.petscInfo(self.logger, "Information about %s (%s): " % (str(self), self.type,), )
+        spf.petscInfo(self.logger, "  This is a %d dimensional problem, contain %d spheres. " % (self.dimension, self.n_sphere), )
+        spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" % (self.update_fun, self.update_order, self.max_it), )
+        spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f" % (self.t0, self.t1, self.eval_dt))
+        spf.petscInfo(self.logger, "  save log file to %s " % self.log_name)
+        spf.petscInfo(self.logger, "  save pickle file to %s " % self.pickle_name)
+        self.print_self_info()
+        
+        for acti in self.action_list:  # type: interactionClass._baseAction
+            acti.print_info()
+        self.relationHandle.print_info()
+        spf.petscInfo(self.logger, " ")
+        return True
 
 
-class ForceSphere2D_matrix(ForceSphere2DProblem):
+class ForceSphere2D_matrixPro(ForceSphere2DProblem):
     def nothing(self):
         pass
