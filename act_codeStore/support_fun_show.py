@@ -1014,7 +1014,7 @@ def show_fig_fun(problem, fig_handle, return_info=False, *args, **kwargs):
     t1 = True
     if rank == 0:
         fig, axi = fig_handle(problem=problem, *args, **kwargs)
-        t1 = fig, axi if return_info else True
+        t1 = (fig, axi) if return_info else True
     return t1
 
 
@@ -1028,7 +1028,7 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
         filetype = list(plt.gcf().canvas.get_supported_filetypes().keys())
         err_msg = 'wrong file extension, support: %s' % filetype
         assert extension[1:] in filetype, err_msg
-    filenameHandle, extension = os.path.splitext(filename)
+    # filenameHandle, extension = os.path.splitext(filename)
     # if extension[1:] in ('png', 'pdf', 'svg'):
     #     metadata = {
     #         'Title':  filenameHandle,
@@ -1050,7 +1050,32 @@ def save_fig_fun(filename, problem, fig_handle, dpi=100, *args, **kwargs):
     
     logger = problem.logger
     spf.petscInfo(logger, ' ')
-    spf.petscInfo(logger, 'save 2D trajectory to %s' % filename)
+    spf.petscInfo(logger, 'save figure to %s' % filename)
+    return True
+
+
+def save_figs_fun(filenames, problem, fig_handle, dpi=100, *args, **kwargs):
+    comm = PETSc.COMM_WORLD.tompi4py()
+    rank = comm.Get_rank()
+    logger = problem.logger
+    spf.petscInfo(logger, ' ')
+    
+    if rank == 0:
+        backend = matplotlib.get_backend()
+        matplotlib.use('Agg')
+        figs, axis = fig_handle(problem=problem, *args, **kwargs)
+        for filename, fig in zip(filenames, figs):
+            extension = os.path.splitext(filename)[1]
+            if extension == '':
+                filename = '%s.png' % filename
+            else:
+                filetype = list(plt.gcf().canvas.get_supported_filetypes().keys())
+                err_msg = 'wrong file extension, support: %s' % filetype
+                assert extension[1:] in filetype, err_msg
+            fig.savefig(fname=filename, dpi=dpi)
+            plt.close(fig)
+            logger.info('save figure to %s' % filename)
+        matplotlib.use(backend)
     return True
 
 
@@ -1231,6 +1256,57 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
     return t_use, W_avg, phi_avg
 
 
+def cal_avrInfo_steer(problem: 'problemClass._base2DProblem',
+                      t_tmin=-np.inf, t_tmax=np.inf,
+                      resampling_fct=1, interp1d_kind='quadratic',
+                      tavr=1, npabs=True):
+    resampling_fct = 1 if resampling_fct is None else resampling_fct
+    tidx = problem.t_hist < np.inf
+    if np.isnan(problem.obj_list[0].W_steer_hist[tidx][0]):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    
+    # without interpolation.
+    if tavr is None:
+        tidx2 = (t_hist >= t_tmin) * (t_hist <= t_tmax)
+        t_use = t_hist[tidx2]
+        W_steer_avg = np.vstack([obji.W_steer_hist[tidx] for obji in problem.obj_list])[:, tidx2][:, 1:]
+        # print(W_steer_avg)
+        phi_steer_avg = np.vstack([obji.phi_steer_hist[tidx] for obji in problem.obj_list])[:, tidx2][:, 1:]
+        W_steer_avg = np.abs(np.vstack(W_steer_avg)) if npabs else np.vstack(W_steer_avg)
+        return t_use, W_steer_avg, phi_steer_avg
+    
+    # interpolation
+    t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
+    avg_stp = np.ceil(tavr / dt_res).astype('int')
+    weights = np.ones(avg_stp) / avg_stp
+    err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
+    assert avg_stp <= t_use.size, err_msg
+    #
+    W_steer_avg = []
+    phi_steer_avg = []
+    for obji in problem.obj_list:  # type:particleClass.particle2D
+        W_steer_hist = interpolate.interp1d(t_hist, obji.W_steer_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
+        phi_steer_hist = get_continue_angle(t_hist, obji.phi_steer_hist[tidx], t_use=t_use)
+        W_steer_avg.append(np.convolve(weights, W_steer_hist, mode='same'))
+        phi_steer_avg.append(np.convolve(weights, phi_steer_hist, mode='same'))
+    W_steer_avg = np.abs(np.vstack(W_steer_avg)) if npabs else np.vstack(W_steer_avg)
+    phi_steer_avg = np.vstack(phi_steer_avg)
+    avg_stpD2 = avg_stp // 2
+    for i0 in np.arange(avg_stpD2):
+        W_steer_avg[:, i0] = W_steer_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        phi_steer_avg[:, i0] = phi_steer_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        W_steer_avg[:, i1] = W_steer_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+        phi_steer_avg[:, i1] = phi_steer_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+    #
+    tidx2 = (t_use >= t_tmin) * (t_use <= t_tmax)
+    t_use = t_use[tidx2]
+    W_steer_avg = W_steer_avg[:, tidx2]
+    phi_steer_avg = phi_steer_avg[:, tidx2]
+    return t_use, W_steer_avg, phi_steer_avg
+
+
 def fun_sort_idx(t_plot, W_avg, phi_avg, sort_type='normal', sort_idx=None):
     def sort_normal(t_plot, W_avg, phi_avg):
         assert t_plot.size - W_avg.shape[1] in (0, 1)
@@ -1252,12 +1328,10 @@ def fun_sort_idx(t_plot, W_avg, phi_avg, sort_type='normal', sort_idx=None):
     return sort_idx
 
 
-def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
-                          figsize=np.array((50, 50)) * 5, dpi=100,
-                          plt_tmin=-np.inf, plt_tmax=np.inf,
-                          resampling_fct=1, interp1d_kind='quadratic',
-                          vmin='None', vmax=1, cmap=plt.get_cmap('bwr'), tavr=1, npabs=True,
-                          sort_type='normal', sort_idx=None, norm='Normalize'):
+def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem', figsize=np.array((50, 50)) * 5, dpi=100,
+                          plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=1, interp1d_kind='quadratic',
+                          cmap=plt.get_cmap('bwr'), tavr=1, sort_type='normal', sort_idx=None,
+                          vmin='None', vmax=1, npabs=True, norm='Normalize', ):
     if vmin == 'None':
         vmin = 0 if npabs else -1
     align = problem.align
@@ -1265,7 +1339,6 @@ def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
                                          resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
                                          tavr=tavr, npabs=npabs)
     sort_idx = fun_sort_idx(t_plot, W_avg, phi_avg, sort_type=sort_type, sort_idx=sort_idx)
-
     
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
@@ -1303,8 +1376,6 @@ def core_avrPhaseVelocity(problem: 'problemClass.behavior2DProblem',
     return fig, axi
 
 
-
-
 def core_avrPhase(problem: 'problemClass._base2DProblem', figsize=np.array((50, 50)) * 5, dpi=100,
                   plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=1, interp1d_kind='quadratic',
                   cmap=plt.get_cmap('bwr'), tavr=1, sort_type='normal', sort_idx=None):
@@ -1312,7 +1383,7 @@ def core_avrPhase(problem: 'problemClass._base2DProblem', figsize=np.array((50, 
                                          resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
                                          tavr=tavr)
     sort_idx = fun_sort_idx(t_plot, W_avg, phi_avg, sort_type=sort_type, sort_idx=sort_idx)
-
+    
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
     vmin, vmax = -1, 1
@@ -1339,6 +1410,324 @@ def core_avrPhase(problem: 'problemClass._base2DProblem', figsize=np.array((50, 
         align = problem.align
         axi.set_title('$\\sigma = %20.10f$' % align)
     return fig, axi
+
+
+def core_phi_W(problem: 'problemClass._base2DProblem', figsize=np.array((50, 50)) * 5, dpi=100,
+               plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=1, interp1d_kind='quadratic',
+               tavr=1, sort_type='normal', sort_idx=None,
+               cmap_phi=plt.get_cmap('bwr'), cmap_W=plt.get_cmap('bwr'),
+               vmin_W='None', vmax_W=1, npabs_W=True, norm_W='Normalize', ):
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+    t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                         resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                         tavr=tavr, npabs=npabs_W)
+    sort_idx = fun_sort_idx(t_plot, W_avg, phi_avg, sort_type=sort_type, sort_idx=sort_idx)
+    figs, axs = [], []
+    
+    # phi ------------------------------------------------------------------------------------------
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    vmin_phi, vmax_phi = -1, 1
+    norm_phi = Normalize(vmin=vmin_phi, vmax=vmax_phi)
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
+    c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx, :] / np.pi, cmap=cmap_phi, norm=norm_phi)
+    clb = fig.colorbar(c, ax=axi)
+    clb.ax.set_title('$\\varphi / \\pi$', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(1, problem.n_obj)
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    
+    # W ------------------------------------------------------------------------------------------
+    if vmin_W == 'None':
+        vmin_W = 0 if npabs_W else -1
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    norm_W = Normalize(vmin=vmin_W, vmax=vmax_W) if norm_W == 'Normalize' else norm_W
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # t_plot = np.hstack((t_plot, t_plot.max() + problem.eval_dt))
+    c = axi.pcolorfast(t_plot, obj_idx, W_avg[sort_idx, :] / align, cmap=cmap_W, norm=norm_W)
+    clb = fig.colorbar(c, ax=axi)
+    if tavr is not None and (tavr > problem.eval_dt):
+        if npabs_W:
+            clb.ax.set_title('$\\langle | \\delta \\varphi | \\rangle / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$ \\langle \\delta \\varphi \\rangle / \\sigma $', fontsize='small')
+    else:
+        if npabs_W:
+            clb.ax.set_title('$| \\delta \\varphi | / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$\\delta \\varphi / \\sigma $', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_title('$\\sigma = %20.10f$' % align)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    return figs, axs
+
+
+def core_phis_Ws(problem: 'problemClass._base2DProblem', figsize=np.array((50, 50)) * 5, dpi=100,
+                 plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=1, interp1d_kind='quadratic',
+                 tavr=1, sort_type='normal', sort_idx=None,
+                 cmap_phis=plt.get_cmap('bwr'), cmap_Ws=plt.get_cmap('bwr'),
+                 vmin_Ws='None', vmax_Ws=1, npabs_Ws=True, norm_Ws='Normalize', ):
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+    t_plot, Ws_avg, phis_avg = cal_avrInfo_steer(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                                 resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                                 tavr=tavr, npabs=npabs_Ws)
+    sort_idx = fun_sort_idx(t_plot, Ws_avg, phis_avg, sort_type=sort_type, sort_idx=sort_idx)
+    figs, axs = [], []
+    
+    # phis ------------------------------------------------------------------------------------------
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    vmin_phis, vmax_phis = -1, 1
+    norm_phis = Normalize(vmin=vmin_phis, vmax=vmax_phis)
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
+    c = axi.pcolorfast(t_plot, obj_idx, phis_avg[sort_idx, :] / np.pi, cmap=cmap_phis, norm=norm_phis)
+    clb = fig.colorbar(c, ax=axi)
+    clb.ax.set_title('$\\varphi_s / \\pi$', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(1, problem.n_obj)
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    
+    # Ws ------------------------------------------------------------------------------------------
+    if vmin_Ws == 'None':
+        vmin_Ws = 0 if npabs_Ws else -1
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    norm_Ws = Normalize(vmin=vmin_Ws, vmax=vmax_Ws) if norm_Ws == 'Normalize' else norm_Ws
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # t_plot = np.hstack((t_plot, t_plot.max() + problem.eval_dt))
+    c = axi.pcolorfast(t_plot, obj_idx, Ws_avg[sort_idx, :] / align, cmap=cmap_Ws, norm=norm_Ws)
+    clb = fig.colorbar(c, ax=axi)
+    if tavr is not None and (tavr > problem.eval_dt):
+        if npabs_Ws:
+            clb.ax.set_title('$\\langle | \\delta \\varphi_s | \\rangle / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$ \\langle \\delta \\varphi_s \\rangle / \\sigma $', fontsize='small')
+    else:
+        if npabs_Ws:
+            clb.ax.set_title('$| \\delta \\varphi_s | / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$\\delta \\varphi_s / \\sigma $', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_title('$\\sigma = %20.10f$' % align)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    return figs, axs
+
+
+def core_phi_W_phis_Ws(problem: 'problemClass._base2DProblem', figsize=np.array((50, 50)) * 5, dpi=100,
+                       plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=1, interp1d_kind='quadratic',
+                       tavr=1, sort_type='normal', sort_idx=None,
+                       cmap_phi=plt.get_cmap('bwr'), cmap_W=plt.get_cmap('bwr'),
+                       vmin_W='None', vmax_W=1, npabs_W=True, norm_W='Normalize',
+                       cmap_phis=plt.get_cmap('bwr'), cmap_Ws=plt.get_cmap('bwr'),
+                       vmin_Ws='None', vmax_Ws=1, npabs_Ws=True, norm_Ws='Normalize', ):
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+    t_plot, W_avg, phi_avg = cal_avrInfo(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                         resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                         tavr=tavr, npabs=npabs_W)
+    t_plot, Ws_avg, phis_avg = cal_avrInfo_steer(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                                 resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                                 tavr=tavr, npabs=npabs_Ws)
+    sort_idx = fun_sort_idx(t_plot, W_avg, phi_avg, sort_type=sort_type, sort_idx=sort_idx)
+    figs, axs = [], []
+    
+    # phi ------------------------------------------------------------------------------------------
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    vmin_phi, vmax_phi = -1, 1
+    norm_phi = Normalize(vmin=vmin_phi, vmax=vmax_phi)
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
+    c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx, :] / np.pi, cmap=cmap_phi, norm=norm_phi)
+    clb = fig.colorbar(c, ax=axi)
+    clb.ax.set_title('$\\varphi / \\pi$', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(1, problem.n_obj)
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    
+    # W ------------------------------------------------------------------------------------------
+    if vmin_W == 'None':
+        vmin_W = 0 if npabs_W else -1
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    norm_W = Normalize(vmin=vmin_W, vmax=vmax_W) if norm_W == 'Normalize' else norm_W
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # t_plot = np.hstack((t_plot, t_plot.max() + problem.eval_dt))
+    c = axi.pcolorfast(t_plot, obj_idx, W_avg[sort_idx, :] / align, cmap=cmap_W, norm=norm_W)
+    clb = fig.colorbar(c, ax=axi)
+    if tavr is not None and (tavr > problem.eval_dt):
+        if npabs_W:
+            clb.ax.set_title('$\\langle | \\delta \\varphi | \\rangle / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$ \\langle \\delta \\varphi \\rangle / \\sigma $', fontsize='small')
+    else:
+        if npabs_W:
+            clb.ax.set_title('$| \\delta \\varphi | / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$\\delta \\varphi / \\sigma $', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_title('$\\sigma = %20.10f$' % align)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    
+    # phis ------------------------------------------------------------------------------------------
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    vmin_phis, vmax_phis = -1, 1
+    norm_phis = Normalize(vmin=vmin_phis, vmax=vmax_phis)
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
+    c = axi.pcolorfast(t_plot, obj_idx, phis_avg[sort_idx, :] / np.pi, cmap=cmap_phis, norm=norm_phis)
+    clb = fig.colorbar(c, ax=axi)
+    clb.ax.set_title('$\\varphi_s / \\pi$', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(1, problem.n_obj)
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    
+    # Ws ------------------------------------------------------------------------------------------
+    if vmin_Ws == 'None':
+        vmin_Ws = 0 if npabs_Ws else -1
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    norm_Ws = Normalize(vmin=vmin_Ws, vmax=vmax_Ws) if norm_Ws == 'Normalize' else norm_Ws
+    obj_idx = np.arange(0, problem.n_obj + 1)
+    # t_plot = np.hstack((t_plot, t_plot.max() + problem.eval_dt))
+    c = axi.pcolorfast(t_plot, obj_idx, Ws_avg[sort_idx, :] / align, cmap=cmap_Ws, norm=norm_Ws)
+    clb = fig.colorbar(c, ax=axi)
+    if tavr is not None and (tavr > problem.eval_dt):
+        if npabs_Ws:
+            clb.ax.set_title('$\\langle | \\delta \\varphi_s | \\rangle / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$ \\langle \\delta \\varphi_s \\rangle / \\sigma $', fontsize='small')
+    else:
+        if npabs_Ws:
+            clb.ax.set_title('$| \\delta \\varphi_s | / \\sigma $', fontsize='small')
+        else:
+            clb.ax.set_title('$\\delta \\varphi_s / \\sigma $', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_title('$\\sigma = %20.10f$' % align)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_obj)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_obj:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    if isinstance(problem, problemClass.behavior2DProblem):
+        align = problem.align
+        axi.set_title('$\\sigma = %20.10f$' % align)
+    figs.append(fig)
+    axs.append(axi)
+    return figs, axs
 
 
 def cal_polar_order(problem: 'problemClass._base2DProblem',

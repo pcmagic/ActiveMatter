@@ -20,16 +20,17 @@ from act_src import problemClass, relationClass, particleClass, interactionClass
 from act_codeStore import support_fun as spf
 
 
+# initial all parameters
 def get_prb_loop_kwargs(**main_kwargs):
     OptDB = PETSc.Options()
     
     ini_t = np.float64(OptDB.getReal("ini_t", 0))
     ign_t = np.float64(OptDB.getReal("ign_t", ini_t))
-    max_t = np.float64(OptDB.getReal("max_t", 1))
+    max_t = np.float64(OptDB.getReal("max_t", 10))
     update_fun = OptDB.getString("update_fun", "1fe")
     rtol = np.float64(OptDB.getReal("rtol", 1e-2))
     atol = np.float64(OptDB.getReal("atol", rtol * 1e-3))
-    eval_dt = np.float64(OptDB.getReal("eval_dt", 0.01))
+    eval_dt = np.float64(OptDB.getReal("eval_dt", 1))
     calculate_fun = OptDB.getString("calculate_fun", "do_behaviorParticle2D")
     fileHandle = OptDB.getString("f", "dbg")
     save_every = np.float64(OptDB.getReal("save_every", 1))
@@ -44,18 +45,19 @@ def get_prb_loop_kwargs(**main_kwargs):
     np.random.seed(seed)
     
     problem_kwargs = {
-        "ini_t":        ini_t,
-        "ign_t":        ign_t,
-        "max_t":        max_t,
-        "update_fun":   update_fun,
-        "update_order": (rtol, atol),
-        "eval_dt":      eval_dt,
-        "fileHandle":   fileHandle,
-        "save_every":   save_every,
-        "rot_noise":    rot_noise,
-        "trs_noise":    trs_noise,
-        "seed":         seed,
-        "tqdm_fun":     tqdm,
+        "ini_t":         ini_t,
+        "ign_t":         ign_t,
+        "max_t":         max_t,
+        "update_fun":    update_fun,
+        "update_order":  (rtol, atol),
+        "eval_dt":       eval_dt,
+        "calculate_fun": calculate_fun,
+        "fileHandle":    fileHandle,
+        "save_every":    save_every,
+        "rot_noise":     rot_noise,
+        "trs_noise":     trs_noise,
+        "seed":          seed,
+        "tqdm_fun":      tqdm,
         }
     
     kwargs_list = (main_kwargs,)
@@ -65,26 +67,7 @@ def get_prb_loop_kwargs(**main_kwargs):
     return problem_kwargs
 
 
-# initial all parameters
 def get_problem_kwargs(**main_kwargs):
-    # format long
-    # ============================================================================================================================================
-    fid_conf = open('Configuration.txt', 'wt')
-    fid_conf.write('Dimensionless Time & i & X & Y:\n')  # 构象
-    
-    fid_matFrm = open('Material_Frame.txt', 'wt')
-    fid_matFrm.write('Dimensionless Time & i & D3x & D3y:\n')  # Material Frame
-    
-    fid_vt = open('Translation_Velocity.txt', 'wt')
-    fid_vt.write('Dimensionless Time & i & UX & UY:\n')  # 平移速度
-    
-    fid_vr = open('Rotation_Velocity.txt', 'wt')
-    fid_vr.write('Dimensionless Time & i & WZ:\n')  # 旋转速度
-    
-    # parameter setup
-    # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-    
-    # todo: modify
     problem_kwargs = get_solver_kwargs()
     OptDB = PETSc.Options()
     #
@@ -93,23 +76,23 @@ def get_problem_kwargs(**main_kwargs):
     # kT2 = 5.5226020e-6;
     # kT = 300*1.380649e-8;
     # mu = 1.0e-6  # Fluid viscosity(血浆的粘度)(g/um/s)
-    mu = 1  # Fluid viscosity(血浆的粘度)(g/um/s)
-    radius = 1.0  # 所有球体的半径
+    mu = OptDB.getReal('mu', 1.0e-6)  # Fluid viscosity(血浆的粘度)(g/um/s)
+    radius = OptDB.getReal('radius', 1)  # 所有球体的半径
     # 数据处理参数
     # rs2 = 6.0  # todo: varify, rs2 \in (6, 12, and other values).
-    rs2 = 12  # todo: varify, rs2 \in (6, 12, and other values).
-    sdis = 1.0e-10  # 最小表面间距
-    For = 0.1  # 给定活性粒子的推进力
-    Tor = 10  # 给定活性粒子的力矩
+    rs2 = OptDB.getReal('rs2', 12)  # todo: varify, rs2 \in (6, 12, and other values).
+    sdis = OptDB.getReal('sdis', 1.0e-4)  # 最小表面间距
+    For = OptDB.getReal('For', 0.1)  # 给定活性粒子的推进力
+    Tor = OptDB.getReal('Tor', 0)  # 给定活性粒子的力矩
     
     # 生成随机球体
-    length = 500.0  # 图像长   改
-    width = 500.0  # 图像宽   改
-    density = 0.9  # 密排度（区间：0-1，图像上的散斑密度）  改
-    variation = 0.9  # 偏移度（区间：0-1，图像上的散斑随机排布程度，0时即为圆点整列）
+    length = OptDB.getReal('length', 10)  # 图像长   改
+    width = OptDB.getReal('width', 10)  # 图像宽   改
+    density = OptDB.getReal('density', 0.3)  # 密排度（区间：0-1，图像上的散斑密度）  改
+    variation = OptDB.getReal('variation', 0.3)  # 偏移度（区间：0-1，图像上的散斑随机排布程度，0时即为圆点整列）
     
     # rng = np.random.seed(5)  # 生成一组随机数种子，使之后Section中产生的散斑伪随机, 这里将种子设置为0.可以调整
-    diag_err = 1e-16  # Avoiding errors introduced by nan values. (避免nan值引入的误差)
+    diag_err = OptDB.getReal('diag_err', 1e-16)  # Avoiding errors introduced by nan values. (避免nan值引入的误差)
     
     # problem_kwargs['kT1'] = kT1
     problem_kwargs['mu'] = mu
@@ -144,83 +127,6 @@ def print_case_info(**problem_kwargs):
     fileHandle = problem_kwargs['fileHandle']
     print_solver_info(**problem_kwargs)
     return True
-
-
-def partical_generator(**problem_kwargs):
-    ## partical generator
-    # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    # 画球体 * matlab语句为： XSC,YSC,ZSC = sphere(100) 这个是python的等价代码，可能因为两个软件的计算方式的不同导致生成的坐标结果存在差异
-    theta0, phi0 = np.linspace(0, np.pi, 101), np.linspace(0, 2 * np.pi, 101)
-    THETA, PHI = np.meshgrid(theta0, phi0)
-    XSC = (np.sin(THETA) * np.cos(PHI)).T
-    YSC = (np.sin(THETA) * np.sin(PHI)).T
-    ZSC = (np.cos(THETA)).T
-    
-    # Section 2：生成随机散斑在图像上的位置
-    major_radius = radius / np.sqrt(np.sqrt(1 - eccentricity * eccentricity))  # 长轴
-    minor_radius = radius * np.sqrt(np.sqrt(1 - eccentricity * eccentricity))  # 短轴
-    # 散斑个数
-    spacing = diameter / density ** (1 / 2)  # 2D
-    colu = int(length // spacing)  # x轴
-    cols = int(width // spacing)  # y轴
-    
-    # 散斑位置
-    x = np.zeros((colu, cols))
-    y = np.zeros((colu, cols))
-    # 散斑边界位置
-    xmin = 0.5 * (length - colu * spacing)
-    ymin = 0.5 * (width - cols * spacing)
-    
-    for i1 in range(colu):
-        for i2 in range(cols):
-            x[i1, i2] = xmin + (i1 + 1) * spacing
-            y[i1, i2] = ymin + (i2 + 1) * spacing
-    
-    # # 加载随机种子
-    S = rng
-    # # 增加随机移动量
-    limit = 0.5 * variation * spacing
-    D = np.random.random((colu, cols)).T  # 为了使两边结果相同
-    E = np.random.random((colu, cols)).T
-    # x = x + limit * (D - 2)
-    # y = y + limit * (E - 2)
-    # x = x + limit * (np.random.random((colu, cols)).T - 2)
-    # y = y + limit * (np.random.random((colu, cols)).T - 2)
-    # NX = x.shape[0]
-    # NY = x.shape[1]  # 各个轴向方向的粒子数
-    # NX = 20
-    # NY = 50
-    NX = 2
-    NY = 2
-    
-    NS = NX * NY  # 总的粒子数
-    print(NS)
-    radii = np.zeros((NS, 1))
-    X0 = np.zeros((NS, 3))  # 各个粒子的坐标
-    
-    for i1 in range(NX):
-        for i2 in range(NY):
-            radii[i1 * NY + i2, 0] = radius  # 粒子的半径
-            X0[i1 * NY + i2, 0] = x[i1, i2]
-            X0[i1 * NY + i2, 1] = y[i1, i2]
-            X0[i1 * NY + i2, 2] = 0  # 顺序：z > y > x
-    
-    R = radii
-    X = X0
-    D1 = np.zeros((NS, 3))  # x 方向（球心处）
-    D2 = np.zeros((NS, 3))  # y 方向（球心处）
-    D3 = np.zeros((NS, 3))  # z 方向（球心处）
-    
-    # todo: modify speedup
-    for i in range(NS):
-        # ax = np.random.random(1)
-        # np.random.seed(22)
-        ax = np.random.rand(1)
-        # ax = np.sqrt(2) * erfinv(2 * ax - 1)  # 为了使python和matlab生成相同的随机数
-        D3[i, :] = np.hstack([np.cos(2 * ax * np.pi), np.sin(2 * ax * np.pi), 0])
-    
-    # todo: check if return more parameters.
-    return R, X
 
 
 def partical_generator_random(**problem_kwargs):
@@ -270,8 +176,8 @@ def partical_generator_LBP(**problem_kwargs):
     y = np.tile((ymin + (np.arange(cols) + 1) * spacing), (colu, 1))
     # 增加随机移动量
     limit = 0.5 * variation * spacing
-    x = x + limit * (np.random.random((cols, colu)) - 2)
-    y = y + limit * (np.random.random((cols, colu)) - 2)
+    x = x + limit * (np.random.random((colu, cols)) - 2)
+    y = y + limit * (np.random.random((colu, cols)) - 2)
     NS = x.size  # 总的粒子数
     #
     sphere_X = np.array([x.ravel(), y.ravel()]).T
@@ -481,22 +387,24 @@ def main_fun_v4(**main_kwargs):
     problem_kwargs = get_problem_kwargs(**main_kwargs)
     print_case_info(**problem_kwargs)
     fileHandle = problem_kwargs['fileHandle']
-    problem_kwargs['matrix_method'] = 'forceSphere2d_simp'
-    problem_kwargs['length'] = 10
-    problem_kwargs['width'] = 10
-    problem_kwargs['sdis'] = 1.0e-4  # 最小表面间距
+    # problem_kwargs['matrix_method'] = 'forceSphere2d_simp'
+    # problem_kwargs['length'] = 100
+    # problem_kwargs['width'] = 100
     # problem_kwargs['update_fun'] = '4'
     # problem_kwargs['update_order'] = (0, 0)
-    problem_kwargs['update_fun'] = '1fe'
-    problem_kwargs['update_order'] = (0, 0)
+    # problem_kwargs['update_fun'] = '1fe'
+    # problem_kwargs['update_order'] = (0, 0)
     # problem_kwargs['update_fun'] = '5bs'
     # problem_kwargs['update_order'] = (1e-9, 1e-12)
+    ini_t = problem_kwargs['ini_t']
+    max_t = problem_kwargs['max_t']
+    eval_dt = problem_kwargs['eval_dt']
     
     # test damo
     # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
     # sphere_R, sphere_X, D3 = partical_generator_random(**problem_kwargs)
-    sphere_R, sphere_X, sphere_phi = partical_generator_dbg(**problem_kwargs)
-    # sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
+    # sphere_R, sphere_X, sphere_phi = partical_generator_dbg(**problem_kwargs)
+    sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
     n_sphere, dof = sphere_X.shape
     
     # loop
@@ -527,7 +435,64 @@ def main_fun_v4(**main_kwargs):
     
     act1 = interactionClass.ForceSphere2D_matrixAct(name=fileHandle)
     prb_loop.add_act(act1)
-    ini_t, max_t, eval_dt = 0, 10, 1
+    spf.petscInfo(prb_loop.logger, "Generate Problem finish. ")
+    prb_loop.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
+    
+    return True
+
+# without matmult precondition
+def main_fun_v5(**main_kwargs):
+    problem_kwargs = get_problem_kwargs(**main_kwargs)
+    print_case_info(**problem_kwargs)
+    fileHandle = problem_kwargs['fileHandle']
+    # problem_kwargs['matrix_method'] = 'forceSphere2d_simp'
+    problem_kwargs['length'] = 100
+    problem_kwargs['width'] = 100
+    # problem_kwargs['update_fun'] = '4'
+    # problem_kwargs['update_order'] = (0, 0)
+    # problem_kwargs['update_fun'] = '1fe'
+    # problem_kwargs['update_order'] = (0, 0)
+    # problem_kwargs['update_fun'] = '5bs'
+    # problem_kwargs['update_order'] = (1e-9, 1e-12)
+    ini_t = problem_kwargs['ini_t']
+    max_t = problem_kwargs['max_t']
+    eval_dt = problem_kwargs['eval_dt']
+    
+    # test damo
+    # sphere_R, sphere_X, D3 = partical_generator(**problem_kwargs)
+    # sphere_R, sphere_X, D3 = partical_generator_random(**problem_kwargs)
+    # sphere_R, sphere_X, sphere_phi = partical_generator_dbg(**problem_kwargs)
+    sphere_R, sphere_X, sphere_phi = partical_generator_LBP(**problem_kwargs)
+    n_sphere, dof = sphere_X.shape
+    
+    # loop
+    prb_loop = problemClass.ForceSphere2D_matrixPro(name=fileHandle, **problem_kwargs)
+    spf.petscInfo(prb_loop.logger, "#" * 72)
+    # spf.petscInfo(prb_loop.logger, "Generate Problem. ")
+    
+    prb_loop.update_fun = problem_kwargs["update_fun"]
+    prb_loop.update_order = problem_kwargs["update_order"]
+    prb_loop.save_every = problem_kwargs["save_every"]
+    prb_loop.tqdm_fun = problem_kwargs["tqdm_fun"]
+    prb_loop.do_save = True
+    
+    prb_loop.relationHandle = relationClass.nothingRelation2D(name=fileHandle)
+    sphere_ptc = particleClass.ForceSphere2D_matrixObj(name=fileHandle)
+    sphere_ptc.X = sphere_X
+    sphere_ptc.phi = sphere_phi
+    sphere_ptc.r = sphere_R
+    sphere_ptc.u = np.zeros(n_sphere)
+    sphere_ptc.U = np.zeros_like(sphere_X)
+    sphere_ptc.w = np.zeros(n_sphere)
+    sphere_ptc.W = np.zeros(n_sphere)
+    # sphere_ptc.prb_MR = prb_MR
+    prb_loop.add_obj(sphere_ptc)
+    # spf.petscInfo(sphere_ptc.logger, "  All the particles have a unified %s=%f, " % ("spin", 0), )
+    # spf.petscInfo(sphere_ptc.logger, "  Generate %d particles with random seed %s" % (self.un.size, self.seed), )
+    # spf.petscInfo(sphere_ptc.logger, "  Generate method: random_sample. ")
+    
+    act1 = interactionClass.ForceSphere2D_matrixAct(name=fileHandle)
+    prb_loop.add_act(act1)
     spf.petscInfo(prb_loop.logger, "Generate Problem finish. ")
     prb_loop.update_self(t0=ini_t, t1=max_t, eval_dt=eval_dt)
     

@@ -48,7 +48,7 @@ calculate_fun_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": spc.do_phaseLagWiener2D_AR,
     "do_phaseLag2D_Wiener":           spc.do_phaseLag2D_Wiener,
     "do_dbg_action":                  spc.do_dbg_action,
-    "do_ackermann":                   spc.do_ackermann,
+    "do_ackermann_goal":              spc.do_ackermann_goal,
     "do_ackermann_alignAttract":      spc.do_ackermann_alignattract,
     "do_ackermann_phaseLag2D":        spc.do_ackermann_phaseLag2D,
     }
@@ -73,7 +73,7 @@ prbHandle_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": problemClass.behavior2DProblem,
     "do_phaseLag2D_Wiener":           problemClass.behavior2DProblem,
     "do_dbg_action":                  problemClass.finiteDipole2DProblem,
-    "do_ackermann":                   problemClass.Ackermann2DProblem,
+    "do_ackermann_goal":              problemClass.Ackermann2DProblem_goal,
     "do_ackermann_alignAttract":      problemClass.Ackermann2DProblem,
     "do_ackermann_phaseLag2D":        problemClass.Ackermann2DProblem,
     }
@@ -98,7 +98,7 @@ rltHandle_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": relationClass.VoronoiBaseRelation2D,
     "do_phaseLag2D_Wiener":           relationClass.localBaseRelation2D,
     "do_dbg_action":                  relationClass.finiteRelation2D,
-    "do_ackermann":                   relationClass.AllBaseRelation2D,
+    "do_ackermann_goal":              relationClass.AllBaseRelation2D,
     "do_ackermann_alignAttract":      relationClass.AllBaseRelation2D,
     "do_ackermann_phaseLag2D":        relationClass.AllBaseRelation2D,
     }
@@ -123,7 +123,7 @@ ptcHandle_dict = {
     "do_phaseLagWiener2D_AR_Voronoi": particleClass.particle2D,
     "do_phaseLag2D_Wiener":           particleClass.particle2D,
     "do_dbg_action":                  particleClass.finiteDipole2D,
-    "do_ackermann":                   particleClass.ackermann2D,
+    "do_ackermann_goal":              particleClass.ackermann2D_goal,
     "do_ackermann_alignAttract":      particleClass.ackermann2D,
     "do_ackermann_phaseLag2D":        particleClass.ackermann2D,
     }
@@ -297,7 +297,7 @@ def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
         figsize = np.array((16, 9)) * 0.3
         dpi, plt_tmin, plt_tmax = 400, -1, prb1.t_hist.max()
         resampling_fct, interp1d_kind = 1, "linear"
-        vmin, vmax = -1, 1
+        # ----------------------------------
         cmap = sps.twilight_diverging()
         fig_name = "%s/avrW_%s.png" % (prb1.name, prb1.name)
         sps.save_fig_fun(fig_name, prb1, sps.core_avrPhaseVelocity, figsize=figsize, dpi=dpi, plt_tmin=plt_tmin, plt_tmax=plt_tmax,
@@ -313,6 +313,60 @@ def export_20220629(prb1: problemClass._baseProblem, tavr=10, **kwargs):
         sps.save_fig_fun(fig_name, prb1, sps.core_avrPhase, figsize=figsize, dpi=dpi, plt_tmin=plt_tmin, plt_tmax=plt_tmax,
                          resampling_fct=resampling_fct, cmap=cmap, tavr=0.01,
                          sort_type="normal", )  # fig_name = '%s/avrPhi2_%s.png' % (prb1.name, prb1.name)  # sps.save_fig_fun(fig_name, prb1, sps.core_avrPhase, figsize=figsize, dpi=dpi,  #                  plt_tmin=plt_tmin, plt_tmax=plt_tmax,  #                  resampling_fct=resampling_fct, cmap=cmap,  #                  tavr=0.01, sort_type='traveling')
+    return True
+
+
+def export_ackermann(prb1: problemClass._baseProblem, tavr=10, **kwargs):
+    OptDB = PETSc.Options()
+    comm = PETSc.COMM_WORLD.tompi4py()
+    rank = comm.Get_rank()
+    
+    # setup
+    export_ackermann = OptDB.getBool("export_ackermann", False)
+    if rank == 0 and export_ackermann:
+        figsize = np.array((16, 9)) * 0.3
+        dpi, plt_tmin, plt_tmax = 400, -1, prb1.t_hist.max()
+        resampling_fct, interp1d_kind = 1, "linear"
+        # ----------------------------------
+        markevery, linestyle = (0.3, "o-C1",)
+        fig_name = "%s/orderR_%s.png" % (prb1.name, prb1.name)
+        sps.save_fig_fun(fig_name, prb1, sps.core_polar_order, figsize=figsize, dpi=dpi,
+                         plt_tmin=plt_tmin, plt_tmax=plt_tmax,
+                         markevery=markevery, linestyle=linestyle, )
+        # # ----------------------------------
+        # cmap_W = plt.get_cmap('bwr')
+        # cmap_phi = plt.get_cmap("twilight_shifted")
+        # filenames = ["%s/avrW_%s.png" % (prb1.name, prb1.name), "%s/avrPhi1_%s.png" % (prb1.name, prb1.name)]
+        # sps.save_figs_fun(filenames, prb1, sps.core_phi_W, figsize=figsize, dpi=dpi, plt_tmin=plt_tmin,
+        #                   resampling_fct=resampling_fct, interp1d_kind='linear',
+        #                   tavr=tavr, sort_type='normal', sort_idx=None,
+        #                   cmap_phi=cmap_phi, cmap_W=cmap_W,
+        #                   vmin_W=None, vmax_W=None, npabs_W=False, norm_W='Normalize', )
+        # # ----------------------------------
+        # cmap_Ws = plt.get_cmap('bwr')
+        # cmap_phis = plt.get_cmap("twilight_shifted")
+        # filenames = ["%s/avrWs_%s.png" % (prb1.name, prb1.name), "%s/avrPhis_%s.png" % (prb1.name, prb1.name)]
+        # sps.save_figs_fun(filenames, prb1, sps.core_phis_Ws, figsize=figsize, dpi=dpi, plt_tmin=plt_tmin,
+        #                   resampling_fct=resampling_fct, interp1d_kind='linear',
+        #                   tavr=tavr, sort_type='normal', sort_idx=None,
+        #                   cmap_phis=cmap_phis, cmap_Ws=cmap_Ws,
+        #                   vmin_Ws=None, vmax_Ws=None, npabs_Ws=False, norm_Ws='Normalize', )
+        # ----------------------------------
+        cmap_W = plt.get_cmap('bwr')
+        cmap_phi = plt.get_cmap("twilight_shifted")
+        cmap_Ws = plt.get_cmap('bwr')
+        cmap_phis = plt.get_cmap("twilight_shifted")
+        filenames = ["%s/avrW_%s.png" % (prb1.name, prb1.name),
+                     "%s/avrPhi1_%s.png" % (prb1.name, prb1.name),
+                     "%s/avrWs_%s.png" % (prb1.name, prb1.name),
+                     "%s/avrPhis_%s.png" % (prb1.name, prb1.name)]
+        sps.save_figs_fun(filenames, prb1, sps.core_phi_W_phis_Ws, figsize=figsize, dpi=dpi, plt_tmin=plt_tmin,
+                          resampling_fct=resampling_fct, interp1d_kind='linear',
+                          tavr=tavr, sort_type='normal', sort_idx=None,
+                          cmap_phi=cmap_phi, cmap_W=cmap_W,
+                          vmin_W=None, vmax_W=None, npabs_W=False, norm_W='Normalize',
+                          cmap_phis=cmap_phis, cmap_Ws=cmap_Ws,
+                          vmin_Ws=None, vmax_Ws=None, npabs_Ws=False, norm_Ws='Normalize', )
     return True
 
 
@@ -333,6 +387,9 @@ def main_fun(**main_kwargs):
     # spf.petscInfo(self.father.logger, problem_kwargs)
     doPrb1 = problem_kwargs["calculate_fun"](**problem_kwargs)
     prb1 = doPrb1.do_calculate(ini_t=ini_t, max_t=max_t, eval_dt=eval_dt, )  # type: problemClass._baseProblem
+    # for obji in prb1.obj_list:
+    #     if obji.rank0:
+    #         print(obji.W_steer_hist)
     # prb1.dbg_t_hist(np.linspace(0, 1, 10 ** 8))
     # do_pickle(prb1, **problem_kwargs)
     do_hdf5(prb1, **problem_kwargs)
@@ -343,6 +400,7 @@ def main_fun(**main_kwargs):
     export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
     # export_20220629(prb1, tavr=np.min((10, max_t / 10)))
     export_20220629(prb1, tavr=eval_dt)
+    export_ackermann(prb1, tavr=None)
     # export_avrPhaseVelocity(prb1, tavr=1)
     
     return True

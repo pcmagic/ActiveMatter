@@ -388,7 +388,6 @@ class particle2D(_baseParticle):
 
 
 class ackermann2D(particle2D):
-    # todo: Add command, annotate references, and define all variables wu
     # reference:May 2017 preprint of Modern Robotics, Lynch and Park, Cambridge U. Press, 2017 http://modernrobotics.org
     """
     l_steer: wheelbase between the front and rear wheels
@@ -402,14 +401,7 @@ class ackermann2D(particle2D):
         self._l_steer = l_steer  # wheelbase
         self._phi_steer = 0  # Car orientation angle
         self._w_steer = 0  # steer self-spin speed
-        self._W_steer = 0  # steer rotational velocity in global coordinate
-        
-        # for dbg only, compare with ir_sim, see car_robot.py of ir_sim project for detail.
-        self._goal = np.ones(3)  # the tragic location of ackermann car
-        self._v_max = np.inf  # Maximum linear speed
-        self._w_max = np.inf  # Maximum angular velocity
-        self._goal_threshold = 0  # Target threshold
-        self._phi_steer_limit = np.inf  # Car orientation angle limit
+        self._W_steer = np.nan * np.array((0,)) # steer rotational velocity in global coordinate
         
         # historical information
         self._phi_steer_hist = []  # Car orientation angle history list
@@ -464,6 +456,43 @@ class ackermann2D(particle2D):
     @W_steer.setter
     def W_steer(self, W_steer):
         self._W_steer = W_steer
+    
+    def update_position(self, X, phi, phi_steer=0, **kwargs):
+        self.X = X
+        self.phi = warpToPi(phi)
+        self.phi_steer = warpToPi(phi_steer)
+        return True
+    
+    def update_velocity(self, U, W, W_steer=0, **kwargs):
+        self.U = U
+        self.W = W
+        self.W_steer = W_steer
+        return True
+    
+    def do_store_data(self, **kwargs):
+        super().do_store_data()
+        if self.rank0:
+            self.W_steer_hist.append(self.W_steer)  # w_steer is a float, no necessary to copy.
+            self.phi_steer_hist.append(self.phi_steer)  # phi_steer is a float, no necessary to copy.
+        return True
+    
+    def update_finish(self):
+        super().update_finish()
+        if self.rank0:
+            self._W_steer_hist = np.hstack(self.W_steer_hist)
+            self._phi_steer_hist = np.hstack(self.phi_steer_hist)
+        return True
+
+
+class ackermann2D_goal(ackermann2D):
+    def __init__(self, l_steer, name="...", **kwargs):
+        super().__init__(l_steer, name, **kwargs)
+        # for dbg only, compare with ir_sim, see car_robot.py of ir_sim project for detail.
+        self._goal = np.ones(3)  # the tragic location of ackermann car
+        self._v_max = np.inf  # Maximum linear speed
+        self._w_max = np.inf  # Maximum angular velocity
+        self._goal_threshold = 0  # Target threshold
+        self._phi_steer_limit = np.inf  # Car orientation angle limit
     
     @property
     def goal(self):
@@ -523,26 +552,8 @@ class ackermann2D(particle2D):
     def update_position(self, X, phi, phi_steer=0, **kwargs):
         self.X = X
         self.phi = warpToPi(phi)
+        # self.phi_steer = warpToPi(np.clip(phi_steer, -self.phi_steer_limit, self.phi_steer_limit))
         self.phi_steer = np.clip(phi_steer, -self.phi_steer_limit, self.phi_steer_limit)
-        return True
-    
-    def update_velocity(self, U, W, W_steer=0, **kwargs):
-        self.U = U
-        self.W = W
-        self.W_steer = W_steer
-        return True
-    
-    def do_store_data(self, **kwargs):
-        super().do_store_data()
-        if self.rank0:
-            self.W_steer_hist.append(self.w_steer)  # w_steer is a float, no necessary to copy.
-            self.phi_steer_hist.append(self.phi_steer)  # phi_steer is a float, no necessary to copy.
-        return True
-    
-    def update_finish(self):
-        super().update_finish()
-        if self.rank0:
-            self._phi_steer_hist = np.hstack(self.phi_steer_hist)
         return True
 
 

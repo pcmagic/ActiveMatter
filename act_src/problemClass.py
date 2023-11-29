@@ -76,6 +76,7 @@ class _baseProblem(baseClass.baseObj):
             sys.stderr = spf.MyLogger(self.logger, logging.ERROR)
         time.sleep(0.1)
         #
+        spf.petscInfo(self.logger, " ")
         spf.petscInfo(self.logger, "Collective motion solver, Zhang Ji, 2021. ")
         if tprint:
             spf.petscInfo(self.logger, "remove folder %s" % fileHandle)
@@ -399,7 +400,7 @@ class _baseProblem(baseClass.baseObj):
     def check_self(self, **kwargs):
         # todo: check all parameters.
         
-        err_msg = "Length must be limited"
+        # err_msg = "Length must be limited"
         # assert np.isfinite(self.length), err_msg % 'length'
         
         err_msg = "Dimension must be 2 or 3 dimensions"
@@ -731,9 +732,10 @@ class _baseProblem(baseClass.baseObj):
         spf.petscInfo(self.logger, " ")
         spf.petscInfo(self.logger, "Information about %s (%s): " % (str(self), self.type,), )
         spf.petscInfo(self.logger, "  This is a %d dimensional problem, contain %d objects. " % (self.dimension, self.n_obj), )
-        spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" % (self.update_fun, self.update_order, self.max_it), )
-        spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f, save_every=%d, seed=%d" %
-                      (self.t0, self.t1, self.eval_dt, self.save_every, self.kwargs['seed']))
+        spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" %
+                      (self.update_fun, self.update_order, self.max_it), )
+        spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f, save_every=%d, seed=%s" %
+                      (self.t0, self.t1, self.eval_dt, self.save_every, str(self.kwargs['seed'])))
         spf.petscInfo(self.logger, "  save log file to %s " % self.log_name)
         spf.petscInfo(self.logger, "  save pickle file to %s " % self.pickle_name)
         self.print_self_info()
@@ -1011,6 +1013,74 @@ class Ackermann2DProblem(behavior2DProblem):
         
         for obji, Xi, phii, phi_steeri in zip(self.obj_list, self.Xall, self.Phiall, self.Phi_steer_all):
             obji.update_position(Xi, phii, phi_steer=phi_steeri)
+        return True
+    
+    def update_velocity(self, **kwargs):
+        obji: particleClass.ackermann2D
+        Uall: np.ndarray
+        Wall: np.ndarray
+        Wi_steer: np.ndarray
+        for obji, Ui, Wi, Wi_steer in zip(self.obj_list, self.Uall, self.Wall, self.W_steer_all):
+            obji.update_velocity(Ui, Wi, W_steer=Wi_steer)
+        return True
+    
+    def _get_y0(self, **kwargs):
+        y0 = np.hstack([self.Xall.ravel(), self.Phiall, self.Phi_steer_all])
+        return y0
+    
+    def Y2Xphi(self, Y):
+        y = self.vec_scatter(Y)
+        nobj = self.n_obj
+        dim = self.dimension
+        X_size = dim * nobj
+        X_all = y[0:X_size]
+        phi_all = y[X_size: X_size + nobj]
+        phi_steer_all = y[X_size + nobj:]
+        return X_all, phi_all, phi_steer_all
+    
+    def _rhsfunction(self, ts, t, Y, F):
+        # structure:
+        #   Y = [X_all, phi_all, phi_steer_all]
+        #   F = [U_all, W_all,   W_steer_all]
+        X_all, phi_all, phi_steer_all = self.Y2Xphi(Y)
+        self.Xall = X_all.reshape((-1, self.dimension))
+        self.Phiall = phi_all
+        self.Phi_steer_all = phi_steer_all
+        self.update_position(ts)
+        #
+        self.update_UWall(F)
+        tF = self.vec_scatter(F)
+        # F.destroy()
+        self.Uall = tF[: self.dimension * self.n_obj].reshape((-1, self.dimension))
+        self.Wall = tF[self.dimension * self.n_obj: (self.dimension + 1) * self.n_obj]
+        self.W_steer_all = tF[(self.dimension + 1) * self.n_obj:]
+        self.update_velocity()
+        return True
+
+
+# this class is build for dbg, compare ir_sim
+#   .../ir_sim/usage/03car_world/car_world.py
+class Ackermann2DProblem_goal(Ackermann2DProblem):
+    def _check_add_obj(self, obj):
+        super()._check_add_obj(obj)
+        err_msg = "wrong object type"
+        assert isinstance(obj, particleClass.ackermann2D_goal), err_msg
+        return True
+    
+    def check_self(self, **kwargs):
+        super().check_self(**kwargs)
+        err_msg = 'only 1fe RK method is avaliable for this kind of problem. '
+        assert self.update_fun == '1fe', err_msg
+        return True
+        
+    
+    def update_position(self, ts, **kwargs):
+        obji: particleClass.ackermann2D
+        Xi: np.ndarray
+        phii: np.ndarray
+        
+        for obji, Xi, phii, phi_steeri in zip(self.obj_list, self.Xall, self.Phiall, self.Phi_steer_all):
+            obji.update_position(Xi, phii, phi_steer=phi_steeri)
         self.Phi_steer_all = np.hstack([objj.phi_steer for objj in self.obj_list])
         
         # update Y as phi_steer is wrapped into (-phi_steer_limit, +phi_steer_limit).
@@ -1024,6 +1094,8 @@ class Ackermann2DProblem(behavior2DProblem):
         dimension = self.dimension
         idxW0 = dimension * self.n_obj
         idxW_steer0 = (dimension + 1) * self.n_obj
+        # spf.petscInfo(self.logger, '%f --------------------------------------------------------' % ts.getTime())
+        # spf.petscInfo(self.logger, Y[:])
         for i0 in range(self.action_list[0].dmda.getRanges()[0][0],
                         self.action_list[0].dmda.getRanges()[0][1]):
             obji = self.obj_list[i0]
@@ -1052,50 +1124,6 @@ class Ackermann2DProblem(behavior2DProblem):
         #     Y.setValue(idxW0 + i0, obji.phi)
         #     Y.setValue(idxW_steer0 + i0, obji.phi_steer)
         # Y.assemble()
-        return True
-    
-    def update_velocity(self, **kwargs):
-        obji: particleClass.ackermann2D
-        Uall: np.ndarray
-        Wall: np.ndarray
-        Wi_steer: np.ndarray
-        for obji, Ui, Wi, Wi_steer in zip(self.obj_list, self.Uall, self.Wall, self.W_steer_all):
-            obji.update_velocity(Ui, Wi, W_steer=Wi_steer)
-        return True
-    
-    def _get_y0(self, **kwargs):
-        y0 = np.hstack([self.Xall.ravel(), self.Phiall, self.Phi_steer_all])
-        return y0
-    
-    def Y2Xphi(self, Y):
-        y = self.vec_scatter(Y)
-        # Y.destroy()
-        nobj = self.n_obj
-        dim = self.dimension
-        X_size = dim * nobj
-        X_all = y[0:X_size]
-        phi_all = y[X_size: X_size + nobj]
-        phi_steer_all = y[X_size + nobj:]
-        return X_all, phi_all, phi_steer_all
-    
-    def _rhsfunction(self, ts, t, Y, F):
-        # structure:
-        #   Y = [X_all, phi_all, phi_steer_all]
-        #   F = [U_all, W_all,   W_steer_all]
-        #
-        X_all, phi_all, phi_steer_all = self.Y2Xphi(Y)
-        self.Xall = X_all.reshape((-1, self.dimension))
-        self.Phiall = phi_all
-        self.Phi_steer_all = phi_steer_all
-        self.update_position(ts)
-        #
-        self.update_UWall(F)
-        tF = self.vec_scatter(F)
-        # F.destroy()
-        self.Uall = tF[: self.dimension * self.n_obj].reshape((-1, self.dimension))
-        self.Wall = tF[self.dimension * self.n_obj: (self.dimension + 1) * self.n_obj]
-        self.W_steer_all = tF[(self.dimension + 1) * self.n_obj:]
-        self.update_velocity()
         return True
 
 
@@ -1153,7 +1181,7 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         super().__init__(name, **kwargs)
         self._n_sphere = -1  # the number of spheres.
         self._sphere_R = None
-
+    
     @property
     def n_sphere(self):
         return self._n_sphere
@@ -1175,7 +1203,7 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         self._dmda.setFromOptions()
         self._dmda.setUp()
         return True
-
+    
     def set_ts_vec(self, **kwargs):
         super().set_ts_vec(**kwargs)
         self._sphere_R = PETSc.Vec().create(comm=PETSc.COMM_WORLD)
@@ -1185,6 +1213,7 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         self.sphere_R[:] = self.obj_list[0].r
         self.sphere_R.assemble()
         return True
+    
     # def update_UWall(self, F):
     #     pass
     #     return True
@@ -1210,8 +1239,8 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         self.Uall = np.array([tF[0::3], tF[1::3]]).T
         self.Wall = tF[2::3]
         self.update_velocity()
-        spf.mpiprint(ts.getTime())
-        spf.mpiprint(self.Xall)
+        # spf.mpiprint(ts.getTime())
+        # spf.mpiprint(self.Xall)
         # print(self.Uall)
         # print(np.vstack((np.cos(self.Phiall), np.sin(self.Phiall))).T)
         # print(self.Wall)
@@ -1259,7 +1288,8 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         spf.petscInfo(self.logger, " ")
         spf.petscInfo(self.logger, "Information about %s (%s): " % (str(self), self.type,), )
         spf.petscInfo(self.logger, "  This is a %d dimensional problem, contain %d spheres. " % (self.dimension, self.n_sphere), )
-        spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" % (self.update_fun, self.update_order, self.max_it), )
+        spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" %
+                      (self.update_fun, self.update_order, self.max_it), )
         spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f" % (self.t0, self.t1, self.eval_dt))
         spf.petscInfo(self.logger, "  save log file to %s " % self.log_name)
         spf.petscInfo(self.logger, "  save pickle file to %s " % self.pickle_name)

@@ -634,14 +634,10 @@ class do_dbg_action(_base_do2D):
         return self.problem
 
 
-class do_ackermann(do_behaviorParticle2D):
+class _base_ackermann(do_behaviorParticle2D):
     def ini_kwargs(self):
         super().ini_kwargs()
-        self._kwargs_necessary = self._kwargs_necessary + ["l_steer", "w_steer", "radian_tolerance"]
-        # err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
-        # assert self.kwargs["update_fun"] == "1fe", err_msg
-        # err_msg = "wrong parameter update_order, only (0, 0) is acceptable. "
-        # assert self.kwargs["update_order"] == (0, 0), err_msg
+        self._kwargs_necessary = self._kwargs_necessary + ["l_steer", "w_steer"]
         return True
     
     def __init__(self, **kwargs):
@@ -664,8 +660,7 @@ class do_ackermann(do_behaviorParticle2D):
         return True
     
     def addInteraction(self):
-        act1 = interactionClass.Ackermann2D(name="Ackermann2D", radian_tolerance=self.kwargs["radian_tolerance"])
-        self.problem.add_act(act1)
+        raise Exception('this is an empty method')
         return True
     
     def _set_particle(self):
@@ -686,24 +681,30 @@ class do_ackermann(do_behaviorParticle2D):
         return True
 
 
-class do_ackermann_alignattract(do_ackermann):
+class do_ackermann_goal(_base_ackermann):
     def ini_kwargs(self):
         super().ini_kwargs()
-        self._kwargs_necessary.remove("radian_tolerance")
+        self._kwargs_necessary = self._kwargs_necessary + ["radian_tolerance", ]
+        err_msg = 'wrong parameter update_fun, only "1fe" is acceptable. '
+        assert self.kwargs["update_fun"] == "1fe", err_msg
+        err_msg = "wrong parameter update_order, only (0, 0) is acceptable. "
+        assert self.kwargs["update_order"] == (0, 0), err_msg
         return True
     
+    def addInteraction(self):
+        act1 = interactionClass.Ackermann2D(name="Ackermann2D", radian_tolerance=self.kwargs["radian_tolerance"])
+        self.problem.add_act(act1)
+        return True
+
+
+class do_ackermann_alignattract(_base_ackermann):
     def addInteraction(self):
         act1 = interactionClass.Ackermann_AlignAttract2D(name="Ackermann_AlignAttract2D")
         self.problem.add_act(act1)
         return True
 
 
-class do_ackermann_phaseLag2D(do_phaseLag2D, do_ackermann):
-    def ini_kwargs(self):
-        super().ini_kwargs()
-        self._kwargs_necessary.remove("radian_tolerance")
-        return True
-    
+class do_ackermann_phaseLag2D(do_phaseLag2D, _base_ackermann):
     def addInteraction(self):
         act1 = interactionClass.Ackermann_phaseLag2D(name="Ackermann_phaseLag2D")
         self.problem.add_act(act1)

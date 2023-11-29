@@ -58,7 +58,7 @@ from act_codeStore import support_fun_show as sps
 from collectiveFish.do_calculate import calculate_fun_dict, prbHandle_dict, rltHandle_dict, ptcHandle_dict
 
 update_fun, update_order, eval_dt = '1fe', (0, 0), 0.1
-nptc, max_t, calculate_fun = 1, eval_dt * 100, 'do_ackermann'
+nptc, max_t, calculate_fun = 1, eval_dt * 100, 'do_ackermann_goal'
 l_steer, w_steer = 3, 0
 
 problem_kwargs = {
@@ -100,8 +100,8 @@ obji.w_max = np.float64(2)
 obji.phi_steer_limit = np.pi / 4
 prb1.update_self(t0=problem_kwargs['ini_t'], t1=problem_kwargs['max_t'], eval_dt=eval_dt, )
 
-print(np.vstack((np.linalg.norm(obji.U_hist, axis=1), obji.W_steer_hist)).T[1:].shape)
-print(np.vstack((obji.X_hist.T, obji.phi_hist, obji.phi_steer_hist)).T[1:].shape)
+print(np.vstack((np.linalg.norm(obji.U_hist, axis=1), obji.W_steer_hist)).T[1:])
+print(np.vstack((obji.X_hist.T, obji.phi_hist, obji.phi_steer_hist)).T[1:])
 
 
 # ################################################################################3
