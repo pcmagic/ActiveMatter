@@ -91,3 +91,10 @@ class baseObj:
     
     def empty_hist(self, **kwargs):
         pass
+    
+    def hdf5_load(self, **kwargs):
+        self._father = None
+        self._comm = PETSc.COMM_WORLD
+        self._rank = self.comm.tompi4py().Get_rank()
+        self._rank0 = self.rank == 0
+        return True

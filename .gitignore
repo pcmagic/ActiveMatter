@@ -50,8 +50,7 @@ collectiveFish/*/
 Parameter_settings
 .github/
 qodana.yaml
-*/Force_Spheres1030*
-ForceSphere/A000-Test_RK4*
+ForceSphere/*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

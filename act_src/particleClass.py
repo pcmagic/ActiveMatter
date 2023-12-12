@@ -34,7 +34,7 @@ class _baseParticle(baseClass.baseObj):
         self._trs_noise = 0  # translational noise
         self._dipole = 0  # dipole intensity
         self._neighbor_list = uniqueList(acceptType=_baseParticle)
-        self._action_list = uniqueList(acceptType=_baseAction)
+        # self._action_list = uniqueList(acceptType=_baseAction)
         # print(self._name)
         # print(self._type)
         # print(self._kwargs)
@@ -223,6 +223,7 @@ class _baseParticle(baseClass.baseObj):
         return obji_hist
     
     def hdf5_load(self, handle, **kwargs):
+        super().hdf5_load(**kwargs)
         obji_hist = handle[self.name]
         self._X_hist = obji_hist["X_hist"][:]
         self._U_hist = obji_hist["U_hist"][:]
@@ -583,6 +584,13 @@ class singleForceSphere2D(particle2D):
         assert isinstance(self.prb_MR, sf.ForceSphere2DProblem), err_msg % "prb_MR"
         return True
 
+    def update_finish(self):
+        if self.rank0:
+            self._X_hist = np.array(self.X_hist)
+            self._U_hist = np.array(self.U_hist)
+            self._W_hist = np.array(self.W_hist)
+            self._phi_hist = np.array(self.phi_hist)
+        return True
 
 class ForceSphere2D(singleForceSphere2D):
     def __init__(self, name="...", **kwargs):
@@ -615,7 +623,7 @@ class ForceSphere2D(singleForceSphere2D):
     
     @particle2D.U.setter
     def U(self, U):
-        self._U = np.array(U)
+        self._U = np.hstack(U)
     
     @particle2D.w.setter
     def w(self, w):

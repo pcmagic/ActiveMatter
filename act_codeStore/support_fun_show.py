@@ -1733,6 +1733,8 @@ def core_phi_W_phis_Ws(problem: 'problemClass._base2DProblem', figsize=np.array(
 def cal_polar_order(problem: 'problemClass._base2DProblem',
                     t_tmin=-np.inf, t_tmax=np.inf, show_idx=None):
     tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    # print(problem.t_hist.shape)
+    # print(problem.obj_list[0].W_hist.shape)
     if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
         tidx[0] = False
     t_hist = problem.t_hist[tidx]
@@ -1742,7 +1744,48 @@ def cal_polar_order(problem: 'problemClass._base2DProblem',
     cplx_R = np.mean(np.array([(np.cos(tobj.phi_hist[tidx]), np.sin(tobj.phi_hist[tidx]))
                                for tobj in problem.obj_list[show_idx]]), axis=0).T
     # avg_all = np.vstack(avg_all)
-    return t_hist, cplx_R
+    ylable = '$R$'
+    return t_hist, cplx_R, ylable
+
+
+def cal_polar_order_ForceSphere_phi(problem: 'problemClass.ForceSphere2DProblem',
+                                    t_tmin=-np.inf, t_tmax=np.inf, show_idx=None):
+    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    # print(problem.t_hist.shape)
+    # print(problem.obj_list[0].W_hist.shape)
+    if np.any(np.isnan(problem.obj_list[0].W_hist[tidx][0])):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    err_msg = 'The Force Sphere problem can only contain a single object with multiple spheres.'
+    assert problem.n_obj == 1, err_msg
+    
+    cplx_R = np.array((np.mean(np.cos(problem.obj_list[0].phi_hist[tidx]), axis=-1),
+                       np.mean(np.sin(problem.obj_list[0].phi_hist[tidx]), axis=-1))).T
+    # avg_all = np.vstack(avg_all)
+    ylable = '$R_\\phi$'
+    return t_hist, cplx_R, ylable
+
+
+def cal_polar_order_ForceSphere_U(problem: 'problemClass.ForceSphere2DProblem',
+                                  t_tmin=-np.inf, t_tmax=np.inf, show_idx=None):
+    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    # print(problem.t_hist.shape)
+    # print(problem.obj_list[0].W_hist.shape)
+    if np.any(np.isnan(problem.obj_list[0].W_hist[tidx][0])):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    err_msg = 'The Force Sphere problem can only contain a single object with multiple spheres.'
+    assert problem.n_obj == 1, err_msg
+    
+    obji = problem.obj_list[0]
+    Ux_hist = obji.U_hist[:, 0::2][tidx]
+    Uy_hist = obji.U_hist[:, 1::2][tidx]
+    Unorm_hist = (Ux_hist ** 2 + Uy_hist ** 2) ** 0.5
+    cplx_R = np.array((np.mean(Ux_hist / Unorm_hist, axis=-1),
+                       np.mean(Uy_hist / Unorm_hist, axis=-1))).T
+    # avg_all = np.vstack(avg_all)
+    ylable = '$R_U$'
+    return t_hist, cplx_R, ylable
 
 
 def cal_polar_order_chimera(problem: 'problemClass._base2DProblem',
@@ -1783,7 +1826,8 @@ def cal_polar_order_chimera(problem: 'problemClass._base2DProblem',
         cos_phi = cos_phi + np.cos(tphi) * ttidx
         sin_phi = sin_phi + np.sin(tphi) * ttidx
     cplx_R = (cos_phi + 1j * sin_phi) / use_phi
-    return t_hist, cplx_R
+    ylable = '$R_{chimera}$'
+    return t_hist, cplx_R, ylable
 
 
 def core_polar_order(problem: 'problemClass._base2DProblem',
@@ -1791,8 +1835,8 @@ def core_polar_order(problem: 'problemClass._base2DProblem',
                      plt_tmin=-np.inf, plt_tmax=np.inf,
                      markevery=0.3, linestyle='-C1',
                      xscale='linear', yscale='linear',
-                     show_idx=None):
-    t_hist, cplx_R = cal_polar_order(problem, t_tmin=plt_tmin, t_tmax=plt_tmax, show_idx=show_idx)
+                     show_idx=None, cal_polar_order_fun=cal_polar_order):
+    t_hist, cplx_R, ylable = cal_polar_order_fun(problem, t_tmin=plt_tmin, t_tmax=plt_tmax, show_idx=show_idx)
     odp_R = np.linalg.norm(cplx_R, axis=-1)
     xlim, ylim = (t_hist.min(), t_hist.max()), (0, 1.03)
     
@@ -1800,7 +1844,7 @@ def core_polar_order(problem: 'problemClass._base2DProblem',
     fig.patch.set_facecolor('white')
     axi.plot(t_hist, odp_R, linestyle, markevery=markevery, )
     axi.set_xlabel('$t$')
-    axi.set_ylabel('$R$')
+    axi.set_ylabel(ylable)
     axi.set_xscale(xscale)
     axi.set_yscale(yscale)
     axi.set_xlim(*xlim)

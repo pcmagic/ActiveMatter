@@ -77,7 +77,8 @@ class _baseProblem(baseClass.baseObj):
         time.sleep(0.1)
         #
         spf.petscInfo(self.logger, " ")
-        spf.petscInfo(self.logger, "Collective motion solver, Zhang Ji, 2021. ")
+        spf.petscInfo(self.logger, "Collective motion solver, Zhang Ji, 2021. Current time: %s" %
+                      datetime.now().strftime("%Y-%m-%d %H:%M:%S"), )
         if tprint:
             spf.petscInfo(self.logger, "remove folder %s" % fileHandle)
         spf.petscInfo(self.logger, "make folder %s" % fileHandle)
@@ -447,13 +448,13 @@ class _baseProblem(baseClass.baseObj):
     
     def update_self_prepare(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
         self._update_start_time = datetime.now()
+        self.set_dmda()
         self.t0 = t0
         self.t1 = t1
         self.eval_dt = eval_dt
         self.max_it = max_it
         self.percentage = 0
         self._obj_list = np.array(self.obj_list)
-        self.set_dmda()
         # print(self.dmda.getRanges())
         self.update_prepare()
         self.set_ts_vec()
@@ -516,7 +517,8 @@ class _baseProblem(baseClass.baseObj):
         
         if self.rank0:
             self._tqdm = self.tqdm_fun(total=100, desc="  %s" % self.name)
-        
+            
+        spf.petscInfo(self.logger, "Solve, start time: %s" % self._update_start_time.strftime("%Y-%m-%d %H:%M:%S"), )
         self.ts.solve(self.ts_y)
         self.update_self_finish(pick_prepare)
         return True
@@ -567,6 +569,7 @@ class _baseProblem(baseClass.baseObj):
         return
     
     def _do_store_data(self, ts, i, t, Y):
+        
         if (t <= self.max_it) and self.do_save:
             dt = ts.getTimeStep()
             if self.rank0:
@@ -600,8 +603,8 @@ class _baseProblem(baseClass.baseObj):
             self.tqdm.update(100 - self.percentage)
             self.tqdm.close()
         time.sleep(0.1)
-        spf.petscInfo(self.logger, "Solve, finish time: %s" % datetime.now().strftime("%Y-%m-%d %H:%M:%S"), )
         self._update_stop_time = datetime.now()
+        spf.petscInfo(self.logger, "Solve, finish time: %s" % self._update_stop_time.strftime("%Y-%m-%d %H:%M:%S"), )
         spf.petscInfo(self.logger, "Solve, usage time: %s" % str(self._update_stop_time - self._update_start_time), )
         spf.petscInfo(self.logger, " ")
         self.ts.destroy()
@@ -673,42 +676,45 @@ class _baseProblem(baseClass.baseObj):
         # self._obj_list = None
         # self._action_list = None
         # self._relationHandle = None
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
-        if rank == 0:
+        if self.rank0:
             with open(self.pickle_name, "wb") as handle:
                 pickle.dump(self, handle, protocol=4)
         spf.petscInfo(self.logger, "Pick problem: %s " % self.pickle_name)
         return True
     
+    def _hdf5_pick_problem(self, handle):
+        hdf5_kwargs = self.hdf5_kwargs
+        prb_hist = handle.create_group(self.name)
+        prb_hist.create_dataset("t_hist", data=self.t_hist, **hdf5_kwargs)
+        prb_hist.create_dataset("dt_hist", data=self.dt_hist, **hdf5_kwargs)
+        return prb_hist
+    
     def hdf5_pick(self, **kwargs):
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
-        if rank == 0:
+        if self.rank0:
             # tsize = self.t_hist.size
-            hdf5_kwargs = self.hdf5_kwargs
             with h5py.File(self.hdf5_name, "w") as handle:
-                prb_hist = handle.create_group(self.name)
-                prb_hist.create_dataset("t_hist", data=self.t_hist, **hdf5_kwargs)
-                prb_hist.create_dataset("dt_hist", data=self.dt_hist, **hdf5_kwargs)
+                self._hdf5_pick_problem(handle)
                 for obji in self.obj_list:  # type: particleClass._baseParticle
                     obji.hdf5_pick(handle, **kwargs)
         spf.petscInfo(self.logger, "Pick HDF5 file: %s " % self.hdf5_name)
         return True
     
+    def _hdf5_load_problem(self, handle):
+        prb_hist = handle[self.name]
+        self._t_hist = prb_hist["t_hist"][:]
+        self._dt_hist = prb_hist["dt_hist"][:]
+        return prb_hist
+    
     def hdf5_load(self, hdf5_name=None, showInfo=False, **kwargs):
-        comm = PETSc.COMM_WORLD.tompi4py()
-        rank = comm.Get_rank()
-        
+        super().hdf5_load(**kwargs)
+        self.set_dmda()
         if showInfo:
             spf.petscInfo(self.logger, "Load problem: %s " % self.hdf5_name)
         
         hdf5_name = self.hdf5_name if hdf5_name is None else hdf5_name
-        if rank == 0:
+        if self.rank0:
             with h5py.File(hdf5_name, "r") as handle:
-                prb_hist = handle[self.name]
-                self._t_hist = prb_hist["t_hist"][:]
-                self._dt_hist = prb_hist["dt_hist"][:]
+                self._hdf5_load_problem(handle)
                 for obji in self.obj_list:  # type: # particleClass._baseParticle
                     obji.hdf5_load(handle, **kwargs)
         
@@ -1072,7 +1078,6 @@ class Ackermann2DProblem_goal(Ackermann2DProblem):
         err_msg = 'only 1fe RK method is avaliable for this kind of problem. '
         assert self.update_fun == '1fe', err_msg
         return True
-        
     
     def update_position(self, ts, **kwargs):
         obji: particleClass.ackermann2D
@@ -1128,6 +1133,12 @@ class Ackermann2DProblem_goal(Ackermann2DProblem):
 
 
 class singleForceSphere2DProblem(_base2DProblem):
+    def _check_add_act(self, act):
+        err_msg = ' '
+        assert self.dimension == 2, err_msg
+        assert act.dimension == 2, err_msg
+        pass
+    
     def _get_y0(self, **kwargs):
         obji = self.obj_list[0]
         y0 = np.hstack([(obji.X[2 * i0], obji.X[2 * i0 + 1], obji.phi[i0]) for i0 in range(self.n_sphere)])
@@ -1135,8 +1146,8 @@ class singleForceSphere2DProblem(_base2DProblem):
     
     def _rhsfunction(self, ts, t, Y, F):
         # structure:
-        #   Y = [(X_i, phi_i)]
-        #   F = [(U_i, W_i)]
+        #   Y = [(X_i, phi_i), ]
+        #   F = [(U_i, W_i), ]
         X_all, phi_all = self.Y2Xphi(Y)
         self.Xall = X_all.reshape((-1, self.dimension))
         self.Phiall = phi_all
@@ -1168,19 +1179,42 @@ class singleForceSphere2DProblem(_base2DProblem):
         phi_all = y[self.dimension * self.n_obj:]
         return X_all, phi_all
     
+    def print_self_info(self):
+        spf.petscInfo(self.logger, "  fluid viscosity: %f, domain size: %f × %f, " %
+                      (self.kwargs['mu'], self.kwargs['length'], self.kwargs['width'],), )
+        spf.petscInfo(self.logger, "  active force strength: %f, active torque strength: %f" %
+                      (self.kwargs['For'], self.kwargs['Tor'],), )
+        spf.petscInfo(self.logger, "  random force strength: %f, random torque strength: %f" %
+                      (self.kwargs['Frnd'], self.kwargs['Trnd'],), )
+        spf.petscInfo(self.logger, "  sphere radius: %f, near filed range: %f, minimal surface distance: %e" %
+                      (self.kwargs['radius'], self.kwargs['rs2'], self.kwargs['sdis'],), )
+        spf.petscInfo(self.logger, "  sphere density: %f, random variation: %f, diag_err: %e" %
+                      (self.kwargs['density'], self.kwargs['variation'], self.kwargs['diag_err'],), )
+    
     def print_info(self):
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!! modify print_info function !!!!!!!!!!!!!!')
+        # OptDB = PETSc.Options()
+        spf.petscInfo(self.logger, " ")
+        spf.petscInfo(self.logger, "Information about %s (%s): " % (str(self), self.type,), )
+        spf.petscInfo(self.logger, "  This is a %d dimensional problem, contain %d spheres. " % (self.dimension, self.n_sphere), )
+        spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" %
+                      (self.update_fun, self.update_order, self.max_it), )
+        spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f" % (self.t0, self.t1, self.eval_dt))
+        spf.petscInfo(self.logger, "  save log file to %s " % self.log_name)
+        spf.petscInfo(self.logger, "  save pickle file to %s " % self.pickle_name)
+        self.print_self_info()
+        
+        for acti in self.action_list:  # type: interactionClass._baseAction
+            acti.print_info()
+        self.relationHandle.print_info()
+        spf.petscInfo(self.logger, " ")
+        return True
 
 
 class ForceSphere2DProblem(singleForceSphere2DProblem):
     def __init__(self, name="...", **kwargs):
         super().__init__(name, **kwargs)
         self._n_sphere = -1  # the number of spheres.
-        self._sphere_R = None
+        self._sphere_R = None  # Petsc vector
     
     @property
     def n_sphere(self):
@@ -1190,12 +1224,35 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
     def sphere_R(self):
         return self._sphere_R
     
+    # def _destroy_problem(self):
+    #     super()._destroy_problem()
+    #     if self._sphere_R is not None:
+    #         self._sphere_R.destroy()
+    #         self._sphere_R = None
+    #     return True
+    
+    def _hdf5_pick_problem(self, handle):
+        prb_hist = super()._hdf5_pick_problem(handle)
+        hdf5_kwargs = self.hdf5_kwargs
+        prb_hist.create_dataset("sphere_R", data=self.sphere_R, **hdf5_kwargs)
+        return prb_hist
+    
+    def _hdf5_load_problem(self, handle):
+        prb_hist = super()._hdf5_load_problem(handle)
+        self._sphere_R = prb_hist["sphere_R"][:]
+        return prb_hist
+    
     def _check_add_obj(self, obj):
         super()._check_add_obj(obj)
-        assert self.n_obj == 0
+        err_msg = 'The Force Sphere problem can only contain a single object with multiple spheres.'
+        assert self.n_obj == 0, err_msg
         err_msg = "wrong object type"
         assert isinstance(obj, particleClass.ForceSphere2D), err_msg
         self._n_sphere = obj.W.size
+        return True
+    
+    def update_prepare(self, showInfo=True):
+        super().update_prepare(showInfo=showInfo)
         return True
     
     def set_dmda(self):
@@ -1206,12 +1263,13 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
     
     def set_ts_vec(self, **kwargs):
         super().set_ts_vec(**kwargs)
-        self._sphere_R = PETSc.Vec().create(comm=PETSc.COMM_WORLD)
-        self.sphere_R.setSizes(self.dmda.getSizes()[0])
-        self.sphere_R.setFromOptions()
-        self.sphere_R.setUp()
-        self.sphere_R[:] = self.obj_list[0].r
-        self.sphere_R.assemble()
+        # self._sphere_R = PETSc.Vec().create(comm=PETSc.COMM_WORLD)
+        # self.sphere_R.setSizes(self.dmda.getSizes()[0])
+        # self.sphere_R.setFromOptions()
+        # self.sphere_R.setUp()
+        # self.sphere_R[:] = self.obj_list[0].r
+        # self.sphere_R.assemble()
+        self._sphere_R = self.obj_list[0].r
         return True
     
     # def update_UWall(self, F):
@@ -1226,9 +1284,8 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
     
     def _rhsfunction(self, ts, t, Y, F):
         # structure:
-        #   Y = [X_all, phi_all]
-        #   F = [U_all, W_all]
-        n_sphere = self.n_sphere
+        #   Y = [(X_i, phi_i), ]
+        #   F = [(U_i, W_i), ]
         X_all, phi_all = self.Y2Xphi(Y)
         self.Xall = X_all
         self.Phiall = phi_all
@@ -1274,34 +1331,43 @@ class ForceSphere2DProblem(singleForceSphere2DProblem):
         obji = self.obj_list[0]
         obji.update_velocity(self.Uall, self.Wall)
         return True
-    
-    def print_self_info(self):
-        spf.petscInfo(self.logger, "  fluid viscosity: %f, force strength: %f, torque strength: %f" %
-                      (self.kwargs['mu'], self.kwargs['For'], self.kwargs['Tor'],), )
-        spf.petscInfo(self.logger, "  sphere radius: %f, near filed range: %f, minimal surface distance: %e, diag_err: %e" %
-                      (self.kwargs['radius'], self.kwargs['rs2'], self.kwargs['sdis'], self.kwargs['diag_err'],), )
-        spf.petscInfo(self.logger, "  domain size: %f × %f, sphere density: %f, random variation: %f" %
-                      (self.kwargs['length'], self.kwargs['width'], self.kwargs['density'], self.kwargs['variation'],), )
-    
-    def print_info(self):
-        # OptDB = PETSc.Options()
-        spf.petscInfo(self.logger, " ")
-        spf.petscInfo(self.logger, "Information about %s (%s): " % (str(self), self.type,), )
-        spf.petscInfo(self.logger, "  This is a %d dimensional problem, contain %d spheres. " % (self.dimension, self.n_sphere), )
-        spf.petscInfo(self.logger, "  update function: %s, update order: %s, max loop: %d" %
-                      (self.update_fun, self.update_order, self.max_it), )
-        spf.petscInfo(self.logger, "  t0=%f, t1=%f, dt=%f" % (self.t0, self.t1, self.eval_dt))
-        spf.petscInfo(self.logger, "  save log file to %s " % self.log_name)
-        spf.petscInfo(self.logger, "  save pickle file to %s " % self.pickle_name)
-        self.print_self_info()
-        
-        for acti in self.action_list:  # type: interactionClass._baseAction
-            acti.print_info()
-        self.relationHandle.print_info()
-        spf.petscInfo(self.logger, " ")
-        return True
 
 
 class ForceSphere2D_matrixPro(ForceSphere2DProblem):
     def nothing(self):
         pass
+
+
+class ForceSphere2D_dbgRK(ForceSphere2D_matrixPro):
+    def __init__(self, name="...", **kwargs):
+        super().__init__(name, **kwargs)
+        self.dbg_Y = []
+        self.dbg_F = []
+    
+    def _rhsfunction(self, ts, t, Y, F):
+        # structure:
+        #   Y = [(X_i, phi_i), ]
+        #   F = [(U_i, W_i), ]
+        X_all, phi_all = self.Y2Xphi(Y)
+        self.Xall = X_all
+        self.Phiall = phi_all
+        self.update_position()
+        self.update_UWall(F)
+        tF = self.vec_scatter(F)
+        self.Uall = np.array([tF[0::3], tF[1::3]]).T
+        self.Wall = tF[2::3]
+        self.update_velocity()
+        
+        dbg_Y = spf.vec_scatter(Y)
+        dbg_F = spf.vec_scatter(F)
+        dbg_Y[2::3] = spf.warpMinMax(dbg_Y[2::3], -np.pi, np.pi)
+        if self.rank0:
+            self.dbg_Y.append(dbg_Y)
+            self.dbg_F.append(dbg_F)
+        # print('%d, Y' % ts.getStepNumber(), ['%6.4f' % i0 for i0 in Y[:]], )
+        # print('%d, phi_all' % ts.getStepNumber(), ['%6.4f' % i0 for i0 in spf.warpToPi(phi_all)], )
+        # y0 = ts.getSolution()[:]
+        # U_rk = 2 * (Y[:] - y0) / self.eval_dt
+        # print('%d, U_rk' % ts.getStepNumber(), ['%6.4f' % i0 for i0 in U_rk], )
+        pass
+        return True
