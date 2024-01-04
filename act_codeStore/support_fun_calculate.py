@@ -692,7 +692,7 @@ class do_ackermann_goal(_base_ackermann):
         return True
     
     def addInteraction(self):
-        act1 = interactionClass.Ackermann2D(name="Ackermann2D", radian_tolerance=self.kwargs["radian_tolerance"])
+        act1 = interactionClass.Ackermann2D_goal(name="Ackermann2D", radian_tolerance=self.kwargs["radian_tolerance"])
         self.problem.add_act(act1)
         return True
 
@@ -707,5 +707,12 @@ class do_ackermann_alignattract(_base_ackermann):
 class do_ackermann_phaseLag2D(do_phaseLag2D, _base_ackermann):
     def addInteraction(self):
         act1 = interactionClass.Ackermann_phaseLag2D(name="Ackermann_phaseLag2D")
+        self.problem.add_act(act1)
+        return True
+
+
+class do_ackermann_smallSigma(do_phaseLag2D, _base_ackermann):
+    def addInteraction(self):
+        act1 = interactionClass.Ackermann_smallSigma(name="Ackermann_phaseLag2D")
         self.problem.add_act(act1)
         return True

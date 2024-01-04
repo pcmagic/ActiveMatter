@@ -441,9 +441,10 @@ class _baseProblem(baseClass.baseObj):
         return ts
     
     def set_dmda(self):
-        self._dmda = PETSc.DMDA().create(sizes=(self.n_obj,), dof=self.dof, stencil_width=0, comm=PETSc.COMM_WORLD)
-        self._dmda.setFromOptions()
-        self._dmda.setUp()
+        if hasattr(self, '_dof'):
+            self._dmda = PETSc.DMDA().create(sizes=(self.n_obj,), dof=self.dof, stencil_width=0, comm=PETSc.COMM_WORLD)
+            self._dmda.setFromOptions()
+            self._dmda.setUp()
         return True
     
     def update_self_prepare(self, t1, t0=0, max_it=10 ** 9, eval_dt=0.001):
@@ -517,7 +518,7 @@ class _baseProblem(baseClass.baseObj):
         
         if self.rank0:
             self._tqdm = self.tqdm_fun(total=100, desc="  %s" % self.name)
-            
+        
         spf.petscInfo(self.logger, "Solve, start time: %s" % self._update_start_time.strftime("%Y-%m-%d %H:%M:%S"), )
         self.ts.solve(self.ts_y)
         self.update_self_finish(pick_prepare)
@@ -625,21 +626,25 @@ class _baseProblem(baseClass.baseObj):
         if self.tqdm is not None:
             self._tqdm = None
         #
-        if self.ts is not None:
-            self.ts.destroy()
-            self.ts = None
+        if hasattr(self, 'ts'):
+            if self.ts is not None:
+                self.ts.destroy()
+                self.ts = None
         #
-        if self.ts_y is not None:
-            self.ts_y.destroy()
-            self.ts_y = None
+        if hasattr(self, 'ts_y'):
+            if self.ts_y is not None:
+                self.ts_y.destroy()
+                self.ts_y = None
         #
-        if self.ts_f is not None:
-            self.ts_f.destroy()
-            self.ts_f = None
+        if hasattr(self, 'ts_f'):
+            if self.ts_f is not None:
+                self.ts_f.destroy()
+                self.ts_f = None
         #
-        if self.dmda is not None:
-            self._dmda.destroy()
-            self._dmda = None
+        if hasattr(self, 'dmda'):
+            if self.dmda is not None:
+                self.dmda.destroy()
+                self._dmda = None
         return True
     
     def destroy_self(self, **kwargs):
@@ -1012,7 +1017,7 @@ class Ackermann2DProblem(behavior2DProblem):
         super().update_prepare(showInfo=showInfo)
         return True
     
-    def update_position(self, ts, **kwargs):
+    def update_position(self, **kwargs):
         obji: particleClass.ackermann2D
         Xi: np.ndarray
         phii: np.ndarray
@@ -1052,7 +1057,7 @@ class Ackermann2DProblem(behavior2DProblem):
         self.Xall = X_all.reshape((-1, self.dimension))
         self.Phiall = phi_all
         self.Phi_steer_all = phi_steer_all
-        self.update_position(ts)
+        self.update_position()
         #
         self.update_UWall(F)
         tF = self.vec_scatter(F)
@@ -1129,6 +1134,26 @@ class Ackermann2DProblem_goal(Ackermann2DProblem):
         #     Y.setValue(idxW0 + i0, obji.phi)
         #     Y.setValue(idxW_steer0 + i0, obji.phi_steer)
         # Y.assemble()
+        return True
+    
+    def _rhsfunction(self, ts, t, Y, F):
+        # structure:
+        #   Y = [X_all, phi_all, phi_steer_all]
+        #   F = [U_all, W_all,   W_steer_all]
+        X_all, phi_all, phi_steer_all = self.Y2Xphi(Y)
+        self.Xall = X_all.reshape((-1, self.dimension))
+        self.Phiall = phi_all
+        self.Phi_steer_all = phi_steer_all
+        self.update_position(ts)
+        #
+        self.update_UWall(F)
+        tF = self.vec_scatter(F)
+        # F.destroy()
+        self.Uall = tF[: self.dimension * self.n_obj].reshape((-1, self.dimension))
+        self.Wall = tF[self.dimension * self.n_obj: (self.dimension + 1) * self.n_obj]
+        self.W_steer_all = tF[(self.dimension + 1) * self.n_obj:]
+        self.update_velocity()
+        print(self.Phi_steer_all - self.Wall)
         return True
 
 

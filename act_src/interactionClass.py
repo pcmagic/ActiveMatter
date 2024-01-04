@@ -597,15 +597,6 @@ class Ackermann2D(_baseAction2D):
     def __init__(self, radian_tolerance=0, **kwargs):
         super().__init__(**kwargs)
         self._obj_list = uniqueList(acceptType=particleClass.ackermann2D)  # contain objects
-        self._radian_tolerance = radian_tolerance
-    
-    @property
-    def radian_tolerance(self):
-        return self._radian_tolerance
-    
-    @radian_tolerance.setter
-    def radian_tolerance(self, radian_tolerance):
-        self._radian_tolerance = radian_tolerance
     
     def update_action(self, F):
         nobj = self.n_obj
@@ -625,6 +616,50 @@ class Ackermann2D(_baseAction2D):
             F.setValue(idxW_steer0 + i0, w_steer, addv=True)
         # assert 1 == 2
         return True
+    
+    @abc.abstractmethod
+    def cal_des_vel(self, obji: "particleClass.ackermann2D", **kwargs):
+        return 0, 0
+    
+    def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
+        # \def\SetClass{article}
+        # \documentclass{\SetClass}
+        # \usepackage[linesnumbered,lined,boxed,commentsnumbered]{algorithm2e}
+        # \begin{document}
+        # \IncMargin{1em}
+        # \begin{algorithm}
+        # \SetKwData{Left}{left}\SetKwData{This}{this}\SetKwData{Up}{up}
+        # \SetKwFunction{Union}{Union}\SetKwFunction{FindCompress}{FindCompress}
+        # \BlankLine
+        # \ U$\leftarrow$ \ {$obji\cdot\ u*obji\cdot\ p1 $}\;
+        # \ W$\leftarrow$ \ {$np\cdot\ tan(obji\cdot\ phi \_steer )* obji\cdot\ u / obji\cdot\ l\_steer $}\;
+        # \caption{Ackermann2D}\label{algo_disjdecomp}
+        # \end{algorithm}\DecMargin{1em}
+        # \end{document}
+        
+        # U -> vehicle velocity
+        # w -> vehicle spin
+        # obj.w -> steer spin
+        obji.u, obji.w_steer = self.cal_des_vel(obji)
+        
+        U = obji.u * obji.P1
+        W = np.tan(obji.phi_steer) * obji.u / obji.l_steer
+        W_steer = obji.w_steer
+        return U, W, W_steer
+
+
+class Ackermann2D_goal(Ackermann2D):
+    def __init__(self, radian_tolerance=0, **kwargs):
+        super().__init__(**kwargs)
+        self._radian_tolerance = radian_tolerance
+    
+    @property
+    def radian_tolerance(self):
+        return self._radian_tolerance
+    
+    @radian_tolerance.setter
+    def radian_tolerance(self, radian_tolerance):
+        self._radian_tolerance = radian_tolerance
     
     def cal_des_vel(self, obji: "particleClass.ackermann2D", **kwargs):
         def relative(state1, state2):
@@ -657,32 +692,6 @@ class Ackermann2D(_baseAction2D):
             v_opti = np.clip(v_max * np.cos(diff_radian), 0, None)
         pass
         return v_opti, w_opti
-    
-    def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
-        # \def\SetClass{article}
-        # \documentclass{\SetClass}
-        # \usepackage[linesnumbered,lined,boxed,commentsnumbered]{algorithm2e}
-        # \begin{document}
-        # \IncMargin{1em}
-        # \begin{algorithm}
-        # \SetKwData{Left}{left}\SetKwData{This}{this}\SetKwData{Up}{up}
-        # \SetKwFunction{Union}{Union}\SetKwFunction{FindCompress}{FindCompress}
-        # \BlankLine
-        # \ U$\leftarrow$ \ {$obji\cdot\ u*obji\cdot\ p1 $}\;
-        # \ W$\leftarrow$ \ {$np\cdot\ tan(obji\cdot\ phi \_steer )* obji\cdot\ u / obji\cdot\ l\_steer $}\;
-        # \caption{Ackermann2D}\label{algo_disjdecomp}
-        # \end{algorithm}\DecMargin{1em}
-        # \end{document}
-        
-        # U -> vehicle velocity
-        # w -> vehicle spin
-        # obj.w -> steer spin
-        obji.u, obji.w_steer = self.cal_des_vel(obji)
-        
-        U = obji.u * obji.P1
-        W = np.tan(obji.phi_steer) * obji.u / obji.l_steer
-        W_steer = obji.w_steer
-        return U, W, W_steer
 
 
 class Ackermann_AlignAttract2D(Ackermann2D):
@@ -721,6 +730,16 @@ class Ackermann_phaseLag2D(phaseLag2D, Ackermann2D):
     
     def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
         return Ackermann2D.update_each_action(self, obji, **kwargs)
+
+
+class Ackermann_smallSigma(Ackermann_phaseLag2D):
+    def update_each_action(self, obji: "particleClass.ackermann2D", **kwargs):
+        obji.u, obji.w_steer = self.cal_des_vel(obji)
+        
+        U = obji.u * obji.P1
+        W = obji.phi_steer * obji.u / obji.l_steer
+        W_steer = obji.w_steer
+        return U, W, W_steer
 
 
 class ForceSphere2D(_baseAction2D):

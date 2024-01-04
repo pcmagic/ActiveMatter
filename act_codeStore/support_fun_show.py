@@ -9,9 +9,11 @@ Created on 20210906
 
 # import subprocess
 import os
+import time
+
 import numpy as np
 # from scipy.io import loadmat
-from scipy import interpolate  # , integrate, spatial, signal
+from scipy import interpolate, signal  # , integrate, spatial
 # from scipy.optimize import leastsq, curve_fit
 # from tqdm import tqdm
 from tqdm.notebook import tqdm as tqdm_notebook
@@ -21,6 +23,7 @@ import warnings
 from petsc4py import PETSc
 # from scipy import sparse
 from colorspacious import cspace_converter
+import multiprocessing, itertools, functools
 
 import matplotlib
 from matplotlib import animation
@@ -67,6 +70,10 @@ preamble = preamble + '\\DeclareMathOperator{\\Tr}{Tr} '
 params['text.latex.preamble'] = preamble
 params['text.usetex'] = True
 plt.rcParams.update(params)
+
+
+def NoneFun(t1, *args, **kwargs):
+    return t1
 
 
 def plt_all_colormap(figsize=None, dpi=100):
@@ -602,11 +609,18 @@ def get_continue_angle(tx, ty1, t_use=None, interp1d_kind='quadratic', bounds_er
     if np.array(t_use).size == 1:
         t_use = np.linspace(tx.min(), tx.max(), t_use * tx.size)
     
-    ty = get_increase_angle(ty1)
-    intp_fun1d = interpolate.interp1d(tx, ty, kind=interp1d_kind, copy=False, axis=0,
+    # ty = get_increase_angle(ty1)
+    # intp_fun1d = interpolate.interp1d(tx, ty, kind=interp1d_kind, copy=False, axis=0,
+    #                                   bounds_error=bounds_error)
+    # ty = intp_fun1d(t_use) % (2 * np.pi)
+    # ty[ty > np.pi] = ty[ty > np.pi] - 2 * np.pi
+    
+    ty1SC = np.vstack((np.sin(ty1), np.cos(ty1))).T
+    intp_fun1d = interpolate.interp1d(tx, ty1SC,
+                                      kind=interp1d_kind, copy=False, axis=0,
                                       bounds_error=bounds_error)
-    ty = intp_fun1d(t_use) % (2 * np.pi)
-    ty[ty > np.pi] = ty[ty > np.pi] - 2 * np.pi
+    tySC = intp_fun1d(t_use)
+    ty = np.arctan2(tySC[:, 0], tySC[:, 1])
     return ty
 
 
@@ -919,6 +933,162 @@ def make2D_Xphi_video(problem: 'problemClass._base2DProblem',
 #     return True
 
 
+def make2D_Xphiomega_image_update_fun(i0, fig_list, pid_i0_dct, filename_handle):
+    # cpu_name = multiprocessing.current_process().name
+    # print(i0, cpu_name)
+    cpu_name = multiprocessing.current_process().name
+    cpu_id = 0 if cpu_name == 'MainProcess' else pid_i0_dct[cpu_name]
+    plt_info = fig_list[cpu_id]
+    fig, (axi, cax), qr, title, stp, title_fmt, t_plot, W_list, phi_list, data_list, output_path, name = plt_info
+    num = i0 * stp
+    qr.set_offsets(data_list[:, num, :])
+    qr.set_UVC(np.cos(phi_list[:, num]), np.sin(phi_list[:, num]), W_list[:, num])
+    title.set_text(title_fmt % (num, t_plot[num]))
+    # print(t_plot.shape, num, t_plot[num])
+    filename = os.path.join(output_path, filename_handle % i0)
+    fig.savefig(fname=filename, dpi=fig.dpi)
+    return True
+
+
+# def make2D_Xphiomega_image_update_dbg(i0, fig_list):
+#     cpu_name = multiprocessing.current_process().name
+#     cpu_indx = multiprocessing.current_process()._identity[0]
+#     print(i0, cpu_name, cpu_indx)
+#     time.sleep(0.1)
+#     return True
+
+def make2D_Xphiomega_image_pid_i0(i0):
+    cpu_name = multiprocessing.current_process().name
+    time.sleep(0.1)
+    return (cpu_name, i0)
+
+
+def make2D_Xphiomega_image(problem: 'problemClass._base2DProblem',
+                           figsize=np.array((11, 9)) * 0.5, dpi=100,
+                           plt_tmin=-np.inf, plt_tmax=np.inf,
+                           stp=1, resampling_fct=1, interp1d_kind='quadratic',
+                           vmin=None, vmax=None, norm=None,
+                           cmap=plt.get_cmap('viridis'), tavr=1,
+                           plt_range=None, output_path='animation', imag_name=None,
+                           use_cpu=None, tqdm_fun=tqdm_notebook, ):
+    comm = PETSc.COMM_WORLD.tompi4py()
+    rank = comm.Get_rank()
+    use_cpu = np.min((problem.n_obj, multiprocessing.cpu_count())) if use_cpu is None else use_cpu
+    tqdm_fun = NoneFun if tqdm_fun is None else tqdm_fun
+    cal_avrInfo_fun = cal_avrInfo_ForceSphere if isinstance(problem, problemClass.singleForceSphere2DProblem) else cal_avrInfo
+    imag_name = 'Xphiomega_%s_%s.png' % (problem.name, '%08d') if imag_name is None else imag_name
+    
+    if rank == 0:
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+            print('make folder %s' % output_path)
+        else:
+            print('exist folder %s' % output_path)
+    
+    backend = matplotlib.get_backend()
+    matplotlib.use('Agg')
+    title_fmt = '$ | \\langle \\delta \\varphi \\rangle | $, idx=%08d, t=%10.4f'
+    t_plot, W_list, phi_list, data_list = cal_avrInfo_fun(problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                                          resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                                          tavr=tavr, npabs=True, intp_X=True)
+    data_max = data_list.max(axis=0).max(axis=0)
+    data_min = data_list.min(axis=0).min(axis=0)
+    data_mid = (data_max + data_min) / 2
+    frames = int(np.floor(t_plot.size // stp))
+    #
+    if norm is None:
+        vmin = W_list.min() if vmin is None else vmin
+        vmax = W_list.max() if vmax is None else vmax
+        print('norm in range (%f, %f)' % (vmin, vmax))
+        norm = Normalize(vmin=vmin, vmax=vmax)
+    else:
+        vmin = norm.vmin
+        vmax = norm.vmax
+        if (vmin is not None) or (vmax is not None):
+            war_msg = 'ignore parameters vmin and vmax'
+            warnings.warn(war_msg)
+        print('current use (vmin, vmax) = (%s, %s) ' % (str(vmin), str(vmax)))
+    
+    #
+    if plt_range is None:
+        plt_range = np.max(data_max - data_min)
+        print('plt_range is', plt_range)
+    
+    fig_list = []
+    for _ in range(use_cpu):
+        fig, (axi, cax) = plt.subplots(nrows=1, ncols=2, figsize=figsize, dpi=dpi, constrained_layout=True,
+                                       gridspec_kw={'width_ratios': [10, 1]})
+        fig.patch.set_facecolor('white')
+        crt_idx = 0
+        axi.set_xlabel('$x_1$')
+        axi.set_ylabel('$x_2$')
+        axi.plot(np.ones(2) * data_mid[0], [data_mid[1] - plt_range / 2, data_mid[1] + plt_range / 2], ' ')
+        axi.plot([data_mid[0] - plt_range / 2, data_mid[0] + plt_range / 2], np.ones(2) * data_mid[1], ' ')
+        axi.set_title("   ")
+        qr = axi.quiver(data_list[:, crt_idx, 0], data_list[:, crt_idx, 1],
+                        np.cos(phi_list[:, crt_idx]), np.sin(phi_list[:, crt_idx]),
+                        W_list[:, crt_idx], cmap=cmap, norm=norm, clim=[vmin, vmax])
+        fig.colorbar(qr, cax=cax, )
+        ax_title = title_fmt % (crt_idx, t_plot[crt_idx])
+        title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
+                                                 'edgecolor': (0, 0, 0, 0),
+                                                 'pad':       5},
+                         transform=axi.transAxes, ha="center", va='bottom')
+        axi.axis('equal')
+        plt_info = (fig, (axi, cax), qr, title, stp, title_fmt, t_plot, W_list, phi_list, data_list, output_path, problem.name)
+        fig_list.append((plt_info))
+    
+    pid_i0_dct = make2D_Xphiomega_image_pid_i0(0)
+    for i0 in tqdm_notebook(range(3420, np.min((W_list.shape[1], frames)))):
+        make2D_Xphiomega_image_update_fun(i0, fig_list, pid_i0_dct, imag_name)
+
+    # iter_frame = np.min((W_list.shape[1], frames))
+    # tmp_list = np.hstack((np.arange(0, iter_frame, use_cpu * 100), iter_frame))
+    # # for i0, i1 in zip((15600, ), (16800, )):
+    # # for i0, i1 in zip((16800, ), (18000, )):
+    # for i0, i1 in zip(tqdm_fun(tmp_list[:-1], desc=problem.name), tmp_list[1:]):
+    #     with multiprocessing.Pool(use_cpu) as pool:
+    #         pid_i0_dct = {key: value for key, value in list(
+    #                 pool.imap(make2D_Xphiomega_image_pid_i0, range(use_cpu)))}
+    #         pool.starmap(make2D_Xphiomega_image_update_fun,
+    #                      tqdm_fun(zip(range(i0, i1),
+    #                                   itertools.repeat(fig_list),
+    #                                   itertools.repeat(pid_i0_dct),
+    #                                   itertools.repeat(imag_name), ),
+    #                               total=(i1 - i0), leave=False, desc=problem.name, ))
+    #         time.sleep(0.1)
+
+    for plt_info in fig_list:
+        fig = plt_info[0]
+        plt.close(fig)
+    matplotlib.use(backend)
+    return True
+
+
+def make2D_Xphiomega_image2video(problem, fps=10, figsize=np.array((11, 9)) * 0.5, dpi=100,
+                                 output_path='animation', *args, **kwargs):
+    imag_name = 'Xphiomega_%s_%s.png' % (problem.name, '%08d')
+    imag_path = os.path.join(output_path, imag_name)
+    anim_name = '%s_%s.avi' % (problem.name, ('%d' % (time.time() * 1e2))[-8:])
+    anim_path = os.path.join(os.path.split(output_path)[0], anim_name)
+    
+    make2D_Xphiomega_image(problem=problem, output_path=output_path, imag_name=imag_name,
+                           figsize=figsize, dpi=dpi, *args, **kwargs)
+    time.sleep(1)
+    
+    ffmpeg_cmd = 'ffmpeg '
+    ffmpeg_cmd = ffmpeg_cmd + '-s %dx%d ' % (figsize[0] * dpi, figsize[1] * dpi)
+    # ffmpeg_cmd = ffmpeg_cmd + '-pix_fmt rgba '
+    ffmpeg_cmd = ffmpeg_cmd + '-r %d ' % fps
+    ffmpeg_cmd = ffmpeg_cmd + '-i %s ' % imag_path
+    # ffmpeg_cmd = ffmpeg_cmd + '-vcodec libx264 '
+    ffmpeg_cmd = ffmpeg_cmd + '-vcodec h264 -pix_fmt yuv420p '
+    ffmpeg_cmd = ffmpeg_cmd + '-y %s ' % anim_path
+    print(ffmpeg_cmd)
+    os.system(ffmpeg_cmd)
+    return True
+
+
 def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
                            figsize=np.array((11, 9)) * 0.5, dpi=100,
                            plt_tmin=-np.inf, plt_tmax=np.inf,
@@ -927,38 +1097,30 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
                            vmin=None, vmax=None, norm=None,
                            cmap=plt.get_cmap('viridis'), tavr=1,
                            plt_range=None, ):
-    assert resampling_fct is None
-    print('dbg, resampling_fct of current method is prohibit. ')
+    # comm = PETSc.COMM_WORLD.tompi4py()
+    # rank = comm.Get_rank()
+    # anim = None
+    cal_avrInfo_fun = cal_avrInfo_ForceSphere if isinstance(problem, problemClass.singleForceSphere2DProblem) else cal_avrInfo
     
-    def update_fun(num, qr, title, phi_list, W_list, data_list, t_plot):
+    def update_fun(num, qr, title, phi_list, W_list, data_list, t_plot, axi, ax_xlim, ax_ylim):
         num = num * stp
+        # print(num)
         tqdm_fun.update(1)
         qr.set_offsets(data_list[:, num, :])
         qr.set_UVC(np.cos(phi_list[:, num]), np.sin(phi_list[:, num]), W_list[:, num])
         title.set_text(title_fmt % (num, t_plot[num]))
+        axi.set_xlim(*ax_xlim)
+        axi.set_ylim(*ax_ylim)
         return True
     
-    t = problem.t_hist
-    tidx = (t >= plt_tmin) * (t <= plt_tmax)
-    tidx[0] = False
-    obj_list = problem.obj_list
     title_fmt = '$ | \\langle \\dot{\\varphi} \\rangle | $, idx=%08d, t=%10.4f'
-    t_plot = problem.t_hist[tidx]
-    dt_res = np.mean(np.diff(t_plot))
-    avg_stp = np.ceil(tavr / dt_res).astype('int')
-    avg_stpD2 = avg_stp // 2
-    weights = np.ones(avg_stp) / avg_stp
-    err_msg = 'tavr <= %f, current: %f' % (t_plot.max() - t_plot.min(), tavr)
-    assert avg_stp <= t_plot.size, err_msg
-    
-    phi_list = np.array([obji.phi_hist[tidx] for obji in obj_list])
-    W_list = np.abs(np.array([np.convolve(weights, obji.W_hist[1:], mode='same') for obji in obj_list]))
-    for i0 in np.arange(avg_stpD2):
-        W_list[:, i0] = W_list[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
-        i1 = - i0 - 1
-        W_list[:, i1] = W_list[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
-    W_list = W_list[:, tidx[1:]]
-    data_list = np.array([obji.X_hist[tidx] for obji in obj_list])
+    t_plot, W_list, phi_list, data_list = cal_avrInfo_fun(problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                                          resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                                          tavr=tavr, npabs=True, intp_X=True)
+    # print('t_plot', t_plot.shape)
+    # print('W_list', W_list.shape)
+    # print('phi_list', phi_list.shape)
+    # print('data_list', data_list.shape)
     data_max = data_list.max(axis=0).max(axis=0)
     data_min = data_list.min(axis=0).min(axis=0)
     data_mid = (data_max + data_min) / 2
@@ -978,9 +1140,7 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
         print('plt_range is', plt_range)
     
     fig, (axi, cax) = plt.subplots(nrows=1, ncols=2, figsize=figsize, dpi=dpi, constrained_layout=True,
-                                   gridspec_kw={
-                                       'width_ratios': [10, 1]
-                                       })
+                                   gridspec_kw={'width_ratios': [10, 1]})
     fig.patch.set_facecolor('white')
     crt_idx = 0
     axi.set_xlabel('$x_1$')
@@ -993,18 +1153,18 @@ def make2D_Xphiomega_video(problem: 'problemClass._base2DProblem',
                     W_list[:, crt_idx], cmap=cmap, norm=norm)
     fig.colorbar(qr, cax=cax)
     ax_title = title_fmt % (crt_idx, t_plot[crt_idx])
-    title = axi.text(0.5, 1, ax_title, bbox={
-        'facecolor': (0, 0, 0, 0),
-        'edgecolor': (0, 0, 0, 0),
-        'pad':       5
-        },
+    ax_xlim, ax_ylim = axi.get_xlim(), axi.get_ylim()
+    title = axi.text(0.5, 1, ax_title, bbox={'facecolor': (0, 0, 0, 0),
+                                             'edgecolor': (0, 0, 0, 0),
+                                             'pad':       5},
                      transform=axi.transAxes, ha="center", va='bottom')
     axi.axis('equal')
     
     frames = t_plot.size // stp
     tqdm_fun = tqdm_notebook(total=frames + 2)
+    # print(phi_list.shape, W_list.shape, data_list.shape)
     anim = animation.FuncAnimation(fig, update_fun, frames, interval=interval, blit=False,
-                                   fargs=(qr, title, phi_list, W_list, data_list, t_plot), )
+                                   fargs=(qr, title, phi_list, W_list, data_list, t_plot, axi, ax_xlim, ax_ylim), )
     return anim
 
 
@@ -1209,8 +1369,7 @@ def cal_avrPhaseVelocity(problem: 'problemClass._base2DProblem',
 def cal_avrInfo(problem: 'problemClass._base2DProblem',
                 t_tmin=-np.inf, t_tmax=np.inf,
                 resampling_fct=1, interp1d_kind='quadratic',
-                tavr=1, npabs=True):
-    resampling_fct = 1 if resampling_fct is None else resampling_fct
+                tavr=1, npabs=True, intp_X=False):
     tidx = problem.t_hist < np.inf
     if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
         tidx[0] = False
@@ -1220,12 +1379,98 @@ def cal_avrInfo(problem: 'problemClass._base2DProblem',
     if tavr is None:
         tidx2 = (t_hist >= t_tmin) * (t_hist <= t_tmax)
         t_use = t_hist[tidx2]
+        # print(t_use)
         W_avg = np.vstack([obji.W_hist[tidx] for obji in problem.obj_list])[:, tidx2][:, 1:]
         phi_avg = np.vstack([obji.phi_hist[tidx] for obji in problem.obj_list])[:, tidx2][:, 1:]
         W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
-        return t_use, W_avg, phi_avg
+        if intp_X:
+            X_avg = np.array([obji.X_hist[tidx] for obji in problem.obj_list])[:, tidx2, :][:, 1:, :]
+            return t_use, W_avg, phi_avg, X_avg
+        else:
+            return t_use, W_avg, phi_avg
     
     # interpolation
+    resampling_fct = 1 if resampling_fct is None else resampling_fct
+    t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
+    avg_stp = np.ceil(tavr / dt_res).astype('int')
+    weights = np.ones(avg_stp) / avg_stp
+    err_msg = 'tavr <= %f, current: %f' % (t_use.max() - t_use.min(), tavr)
+    assert avg_stp <= t_use.size, err_msg
+    #
+    W_avg = []
+    phi_avg = []
+    X_avg = []
+    for obji in problem.obj_list:  # type:particleClass.particle2D
+        W_hist = interpolate.interp1d(t_hist, obji.W_hist[tidx], kind=interp1d_kind, copy=False)(t_use)
+        phi_hist = get_continue_angle(t_hist, obji.phi_hist[tidx], t_use=t_use)
+        X_hist = interpolate.interp1d(t_hist, obji.X_hist[tidx], kind=interp1d_kind, copy=False, axis=0)(t_use)
+        W_avg.append(signal.convolve(W_hist, weights, mode='same'))
+        phi_avg.append(signal.convolve(phi_hist, weights, mode='same'))
+        X_avg.append(signal.convolve(X_hist, np.array((weights, weights)).T, mode='same'))
+        # print(W_hist.shape, W_avg[0].shape, t_use.shape)
+        # assert 1 == 2
+    
+    W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
+    phi_avg = np.vstack(phi_avg)
+    X_avg = np.array(X_avg)
+    avg_stpD2 = avg_stp // 2
+    for i0 in np.arange(avg_stpD2):
+        W_avg[:, i0] = W_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        phi_avg[:, i0] = phi_avg[:, i0] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        X_avg[:, i0, :] = X_avg[:, i0, :] / (avg_stpD2 + i0 + avg_stp % 2) * avg_stp
+        i1 = - i0 - 1
+        W_avg[:, i1] = W_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+        phi_avg[:, i1] = phi_avg[:, i1] / (avg_stpD2 + i0 + 1) * avg_stp
+        X_avg[:, i1, :] = X_avg[:, i1, :] / (avg_stpD2 + i0 + 1) * avg_stp
+    #
+    tidx2 = (t_use >= t_tmin) * (t_use <= t_tmax)
+    t_use = t_use[tidx2]
+    W_avg = W_avg[:, tidx2]
+    phi_avg = phi_avg[:, tidx2]
+    X_avg = X_avg[:, tidx2, :]
+    
+    if intp_X:
+        return t_use, W_avg, phi_avg, X_avg
+    else:
+        return t_use, W_avg, phi_avg
+
+
+def cal_avrInfo_ForceSphere(problem: 'problemClass.ForceSphere2DProblem',
+                            t_tmin=-np.inf, t_tmax=np.inf,
+                            resampling_fct=1, interp1d_kind='quadratic',
+                            tavr=None, npabs=True, intp_X=False):
+    err_msg = "currently, we assume a constant eval_dt, so only two update_funs ('1fe', '4') are available. "
+    assert problem.update_fun in ('1fe', '4'), err_msg
+    err_msg = "currently, we assume a constant eval_dt, so we force tavr == None. "
+    assert tavr is None, err_msg
+    
+    tidx = problem.t_hist < np.inf
+    if np.any(np.isnan(problem.obj_list[0].W_hist[tidx][0])):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    
+    # without interpolation.
+    if tavr is None:
+        tidx2 = (t_hist >= t_tmin) * (t_hist <= t_tmax)
+        t_use = t_hist[tidx2]
+        W_avg = problem.obj_list[0].W_hist[tidx][tidx2].T
+        phi_avg = problem.obj_list[0].phi_hist[tidx][tidx2].T
+        W_avg = np.abs(np.vstack(W_avg)) if npabs else np.vstack(W_avg)
+        if intp_X:
+            kwargs = problem.kwargs
+            length = kwargs['length']
+            width = kwargs['width']
+            X_avg = problem.obj_list[0].X_hist.reshape(
+                    problem.t_hist.size, problem.n_sphere, problem.dimension
+                    )[tidx][tidx2].transpose(1, 0, 2)
+            X_avg[:, :, 0] = np.mod(X_avg[:, :, 0], length)
+            X_avg[:, :, 1] = np.mod(X_avg[:, :, 1], width)
+            return t_use, W_avg, phi_avg, X_avg
+        else:
+            return t_use, W_avg, phi_avg
+    
+    # interpolation
+    resampling_fct = 1 if resampling_fct is None else resampling_fct
     t_use, dt_res = np.linspace(t_hist.min(), t_hist.max(), int(t_hist.size * resampling_fct), retstep=True)
     avg_stp = np.ceil(tavr / dt_res).astype('int')
     weights = np.ones(avg_stp) / avg_stp
@@ -1309,6 +1554,7 @@ def cal_avrInfo_steer(problem: 'problemClass._base2DProblem',
 
 def fun_sort_idx(t_plot, W_avg, phi_avg, sort_type='normal', sort_idx=None):
     def sort_normal(t_plot, W_avg, phi_avg):
+        
         assert t_plot.size - W_avg.shape[1] in (0, 1)
         t_use = t_plot[-W_avg.shape[1]:]
         t_threshold = (t_use.max() - t_use.min()) / 2 + t_use.min()
@@ -1317,14 +1563,29 @@ def fun_sort_idx(t_plot, W_avg, phi_avg, sort_type='normal', sort_idx=None):
         sort_idx = np.argsort(np.mean(np.abs(W_avg[:, tidx] * dt[tidx]), axis=-1))
         return sort_idx
     
+    def sort_normal_phi(t_plot, W_avg, phi_avg):
+        
+        assert t_plot.size - phi_avg.shape[1] in (0, 1)
+        t_use = t_plot[-phi_avg.shape[1]:]
+        t_threshold = (t_use.max() - t_use.min()) / 2 + t_use.min()
+        tidx = t_use > t_threshold
+        dt = np.hstack((0, np.diff(t_use)))
+        sort_idx = np.argsort(np.mean(phi_avg[:, tidx] * dt[tidx], axis=-1))
+        return sort_idx
+    
     sort_dict = {
-        'normal':    sort_normal,
-        'traveling': lambda t_plot, W_avg, phi_avg: np.argsort(phi_avg[:, -1])
+        'normal':     sort_normal,
+        'normal_phi': sort_normal_phi,
+        'traveling':  lambda t_plot, W_avg, phi_avg: np.argsort(phi_avg[:, -1])
         }
-    try:
-        sort_idx = sort_dict[sort_type](t_plot, W_avg, phi_avg) if sort_idx is None else sort_idx
-    except:
-        raise ValueError('wrong sort_type, current: %s, accept: %s' % (sort_type, sort_dict.keys()))
+    
+    if sort_type is None:
+        sort_idx = np.arange(W_avg.shape[0]) if sort_idx is None else sort_idx
+    else:
+        try:
+            sort_idx = sort_dict[sort_type](t_plot, W_avg, phi_avg) if sort_idx is None else sort_idx
+        except:
+            raise ValueError('wrong sort_type, current: %s, accept: %s' % (sort_type, sort_dict.keys()))
     return sort_idx
 
 
@@ -1730,6 +1991,81 @@ def core_phi_W_phis_Ws(problem: 'problemClass._base2DProblem', figsize=np.array(
     return figs, axs
 
 
+def core_phi_W_ForceSphere(problem: 'problemClass._base2DProblem', figsize=np.array((50, 50)) * 5, dpi=100,
+                           plt_tmin=-np.inf, plt_tmax=np.inf, resampling_fct=1, interp1d_kind='quadratic',
+                           tavr=1, sort_type='normal', sort_idx=None,
+                           cmap_phi=plt.get_cmap('bwr'), cmap_W=plt.get_cmap('bwr'),
+                           vmin_W='None', vmax_W=1, npabs_W=True, norm_W='Normalize', ):
+    t_plot, W_avg, phi_avg = cal_avrInfo_ForceSphere(problem=problem, t_tmin=plt_tmin, t_tmax=plt_tmax,
+                                                     resampling_fct=resampling_fct, interp1d_kind=interp1d_kind,
+                                                     tavr=tavr, npabs=npabs_W)
+    sort_idx = fun_sort_idx(t_plot, W_avg, phi_avg, sort_type=sort_type, sort_idx=sort_idx)
+    figs, axs = [], []
+    
+    # phi ------------------------------------------------------------------------------------------
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    vmin_phi, vmax_phi = -1, 1
+    norm_phi = Normalize(vmin=vmin_phi, vmax=vmax_phi)
+    obj_idx = np.arange(0, problem.n_sphere + 1)
+    # c = axi.pcolor(t_plot, obj_idx, avg_all[sort_idx, :], cmap=cmap, norm=norm, shading='auto')
+    c = axi.pcolorfast(t_plot, obj_idx, phi_avg[sort_idx, :] / np.pi, cmap=cmap_phi, norm=norm_phi)
+    clb = fig.colorbar(c, ax=axi)
+    clb.ax.set_title('$\\varphi / \\pi$', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(1, problem.n_sphere)
+    axi.set_ylim(obj_idx.min(), problem.n_sphere)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_sphere:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    figs.append(fig)
+    axs.append(axi)
+    
+    # W ------------------------------------------------------------------------------------------
+    if vmin_W == 'None':
+        vmin_W = 0 if npabs_W else -1
+    fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig.patch.set_facecolor('white')
+    norm_W = Normalize(vmin=vmin_W, vmax=vmax_W) if norm_W == 'Normalize' else norm_W
+    obj_idx = np.arange(0, problem.n_sphere + 1)
+    # t_plot = np.hstack((t_plot, t_plot.max() + problem.eval_dt))
+    c = axi.pcolorfast(t_plot, obj_idx, W_avg[sort_idx, :], cmap=cmap_W, norm=norm_W)
+    clb = fig.colorbar(c, ax=axi)
+    if tavr is not None and (tavr > problem.eval_dt):
+        if npabs_W:
+            clb.ax.set_title('$\\langle | \\delta \\varphi | \\rangle$', fontsize='small')
+        else:
+            clb.ax.set_title('$ \\langle \\delta \\varphi \\rangle$', fontsize='small')
+    else:
+        if npabs_W:
+            clb.ax.set_title('$| \\delta \\varphi |$', fontsize='small')
+        else:
+            clb.ax.set_title('$\\delta \\varphi$', fontsize='small')
+    axi.set_xlabel('$t$')
+    axi.set_ylabel('index')
+    # axi.set_title('$\\sigma = %20.10f$' % align)
+    axi.set_xlim(t_plot.min(), t_plot.max())
+    axi.set_ylim(obj_idx.min(), problem.n_sphere)
+    yticks = axi.get_yticks()
+    if yticks.size < problem.n_sphere:
+        yticks[0] = 1
+        axi.set_yticks(yticks - 0.5)
+        axi.set_yticklabels(['%d' % i0 for i0 in yticks])
+    else:
+        axi.set_yticks(obj_idx[1:] - 0.5)
+        axi.set_yticklabels(obj_idx[1:])
+    figs.append(fig)
+    axs.append(axi)
+    return figs, axs
+
+
 def cal_polar_order(problem: 'problemClass._base2DProblem',
                     t_tmin=-np.inf, t_tmax=np.inf, show_idx=None):
     tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
@@ -1745,6 +2081,25 @@ def cal_polar_order(problem: 'problemClass._base2DProblem',
                                for tobj in problem.obj_list[show_idx]]), axis=0).T
     # avg_all = np.vstack(avg_all)
     ylable = '$R$'
+    return t_hist, cplx_R, ylable
+
+
+# Ackermann steer
+def cal_polar_order_steer(problem: 'problemClass._base2DProblem',
+                          t_tmin=-np.inf, t_tmax=np.inf, show_idx=None):
+    tidx = (problem.t_hist >= t_tmin) * (problem.t_hist <= t_tmax)
+    # print(problem.t_hist.shape)
+    # print(problem.obj_list[0].W_hist.shape)
+    if np.isnan(problem.obj_list[0].W_hist[tidx][0]):
+        tidx[0] = False
+    t_hist = problem.t_hist[tidx]
+    if show_idx is None:
+        show_idx = np.arange(problem.n_obj)
+    
+    cplx_R = np.mean(np.array([(np.cos(tobj.phi_steer_hist[tidx]), np.sin(tobj.phi_steer_hist[tidx]))
+                               for tobj in problem.obj_list[show_idx]]), axis=0).T
+    # avg_all = np.vstack(avg_all)
+    ylable = '$R_s$'
     return t_hist, cplx_R, ylable
 
 
@@ -1839,10 +2194,18 @@ def core_polar_order(problem: 'problemClass._base2DProblem',
     t_hist, cplx_R, ylable = cal_polar_order_fun(problem, t_tmin=plt_tmin, t_tmax=plt_tmax, show_idx=show_idx)
     odp_R = np.linalg.norm(cplx_R, axis=-1)
     xlim, ylim = (t_hist.min(), t_hist.max()), (0, 1.03)
+    if markevery is None:
+        markevery = 1
+    elif markevery < 1:
+        markevery = int(1 / markevery)
+    elif markevery > 1:
+        markevery = markevery
+    else:
+        raise ValueError('wrong markevery, current: %s' % str(markevery))
     
     fig, axi = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     fig.patch.set_facecolor('white')
-    axi.plot(t_hist, odp_R, linestyle, markevery=markevery, )
+    axi.plot(t_hist[::markevery], odp_R[::markevery], linestyle)
     axi.set_xlabel('$t$')
     axi.set_ylabel(ylable)
     axi.set_xscale(xscale)

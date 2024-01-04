@@ -52,6 +52,7 @@ calculate_fun_dict = {
     "do_ackermann_goal":              spc.do_ackermann_goal,
     "do_ackermann_alignAttract":      spc.do_ackermann_alignattract,
     "do_ackermann_phaseLag2D":        spc.do_ackermann_phaseLag2D,
+    "do_ackermann_smallSigma":        spc.do_ackermann_smallSigma,
     }
 
 prbHandle_dict = {
@@ -77,6 +78,7 @@ prbHandle_dict = {
     "do_ackermann_goal":              problemClass.Ackermann2DProblem_goal,
     "do_ackermann_alignAttract":      problemClass.Ackermann2DProblem,
     "do_ackermann_phaseLag2D":        problemClass.Ackermann2DProblem,
+    "do_ackermann_smallSigma":        problemClass.Ackermann2DProblem,
     }
 
 rltHandle_dict = {
@@ -102,6 +104,7 @@ rltHandle_dict = {
     "do_ackermann_goal":              relationClass.AllBaseRelation2D,
     "do_ackermann_alignAttract":      relationClass.AllBaseRelation2D,
     "do_ackermann_phaseLag2D":        relationClass.AllBaseRelation2D,
+    "do_ackermann_smallSigma":        relationClass.AllBaseRelation2D,
     }
 
 ptcHandle_dict = {
@@ -127,6 +130,7 @@ ptcHandle_dict = {
     "do_ackermann_goal":              particleClass.ackermann2D_goal,
     "do_ackermann_alignAttract":      particleClass.ackermann2D,
     "do_ackermann_phaseLag2D":        particleClass.ackermann2D,
+    "do_ackermann_smallSigma":        particleClass.ackermann2D,
     }
 
 
@@ -277,6 +281,30 @@ def main_ignFirst(**main_kwargs):
     export_trajectory2D(prb1)
     export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
     export_20220629(prb1, tavr=eval_dt)
+    export_ackermann(prb1, tavr=None)
+    return True
+
+
+def main_dbg(**main_kwargs):
+    problem_kwargs = get_problem_kwargs(**main_kwargs)
+    ini_t = problem_kwargs["ini_t"]
+    ign_t = problem_kwargs["ign_t"]
+    max_t = problem_kwargs["max_t"]
+    eval_dt = problem_kwargs["eval_dt"]
+    
+    doPrb1 = problem_kwargs["calculate_fun"](**problem_kwargs)
+    prb1 = doPrb1.ini_calculate()
+    if ign_t > ini_t:
+        prb1.do_save = False
+        prb1.update_self(t0=ini_t, t1=ign_t, eval_dt=eval_dt, pick_prepare=False)
+        prb1.do_save = True
+    prb1.update_self(t0=ign_t, t1=max_t, eval_dt=eval_dt)
+    do_hdf5(prb1, **problem_kwargs)
+    prb1.hdf5_load()
+    export_trajectory2D(prb1)
+    export_avrPhaseVelocity(prb1, tavr=np.min((10, max_t / 10)))
+    export_20220629(prb1, tavr=eval_dt)
+    export_ackermann(prb1, tavr=None)
     return True
 
 
@@ -289,6 +317,10 @@ if __name__ == "__main__":
     if OptDB.getBool("main_ignFirst", False):
         OptDB.setValue("main_fun", False)
         main_ignFirst()
+    
+    if OptDB.getBool("main_dbg", False):
+        OptDB.setValue("main_fun", False)
+        main_dbg()
     
     if OptDB.getBool("main_fun", True):
         main_fun()
